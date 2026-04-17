@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from src import derivatives as derivatives_mod
 from src.config import CONFIG
 from src.confluence import cluster, split_by_price
-from src.fetch import fetch_all
+from src.fetch import fetch_all, taker_delta_per_tf
 from src.fibs import compute_all
 from src.main import (
     ATR_CLUSTER_MULTIPLIER,
@@ -82,6 +82,7 @@ async def build():
         "resistance": [z_to_dict(z) for z in resistance[:8]],
         "support": [z_to_dict(z) for z in support[:8]],
         "derivatives": deriv,
+        "spot_taker_delta_by_tf": taker_delta_per_tf(ohlc),
     }
 
 

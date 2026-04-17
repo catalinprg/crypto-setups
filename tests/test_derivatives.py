@@ -12,6 +12,24 @@ FIX = Path(__file__).parent / "fixtures" / "coinalyze"
 def _load(name):
     return json.loads((FIX / f"{name}.json").read_text())
 
+def test_aggregate_open_interest_returns_none_change_when_no_shared_venues():
+    # Current has A+6; history has only 3 → no overlap. Change pct must be
+    # None (not 0.0) so the agent prompt degrades truthfully.
+    raw_current = [
+        {"symbol": "BTCUSDT_PERP.A", "value": 7_000_000_000.0},
+        {"symbol": "BTCUSDT.6",      "value": 4_000_000_000.0},
+    ]
+    raw_history = [
+        {"symbol": "BTCUSDT_PERP.3", "history": [
+            {"t": 1000, "c": 1_000_000_000},
+            {"t": 1001, "c": 1_100_000_000},
+        ]},
+    ]
+    result = aggregate_open_interest(raw_current, raw_history, lookback_buckets=1)
+    assert result["total_usd"] == 11_000_000_000.0
+    assert result["change_24h_pct"] is None
+
+
 def test_aggregate_open_interest_sums_across_venues():
     raw_current = [
         {"symbol": "BTCUSDT_PERP.A", "value": 7_000_000_000.0, "update": 1},
@@ -45,10 +63,23 @@ def test_aggregate_liquidations_24h_totals():
             for t in range(1000, 1018)  # 18 buckets
         ]},
     ]
-    result = aggregate_liquidations(raw_liq, buckets_24h=6)
+    result = aggregate_liquidations(raw_liq, num_buckets=6)
     # Last 6 buckets: 6*10M long, 6*2M short
     assert result["long_usd"] == 60_000_000.0
     assert result["short_usd"] == 12_000_000.0
+    assert result["dominant_side"] == "long"
+
+
+def test_aggregate_liquidations_72h_totals():
+    raw_liq = [
+        {"symbol": "BTCUSDT_PERP.A", "history": [
+            {"t": t, "l": 10_000_000.0, "s": 2_000_000.0}
+            for t in range(1000, 1018)  # 18 buckets = full 72h window
+        ]},
+    ]
+    result = aggregate_liquidations(raw_liq, num_buckets=18)
+    assert result["long_usd"] == 180_000_000.0
+    assert result["short_usd"] == 36_000_000.0
     assert result["dominant_side"] == "long"
 
 def test_detect_clusters_flags_outlier_buckets():
@@ -60,6 +91,23 @@ def test_detect_clusters_flags_outlier_buckets():
     assert len(clusters) >= 1
     assert clusters[0]["total_usd"] == 100_000_000
     assert clusters[0]["t"] == 1010
+
+
+def test_mad_clusters_survive_second_outlier():
+    # The core regression MAD fixes: two near-equal megabars would inflate
+    # the old mean+stddev threshold enough to swallow a third real cluster.
+    # With MAD the two megabars don't move the median — all three get
+    # flagged.
+    history = [{"t": 1100 + i, "l": 500_000, "s": 500_000} for i in range(15)]
+    history.append({"t": 2001, "l": 100_000_000, "s": 0})
+    history.append({"t": 2002, "l": 100_000_000, "s": 0})
+    history.append({"t": 2003, "l":  10_000_000, "s": 0})
+    raw = [{"symbol": "BTCUSDT_PERP.A", "history": history}]
+    clusters = detect_clusters(raw, stddev_threshold=2.0)
+    flagged_ts = {c["t"] for c in clusters}
+    assert 2001 in flagged_ts
+    assert 2002 in flagged_ts
+    assert 2003 in flagged_ts
 
 def test_build_derivatives_payload_happy_path_from_fixtures():
     payload = build_derivatives_payload(
@@ -73,6 +121,9 @@ def test_build_derivatives_payload_happy_path_from_fixtures():
     assert payload["funding_rate_annualized_pct"] is not None
     assert "long_usd" in payload["liquidations_24h"]
     assert isinstance(payload["liquidation_clusters_72h"], list)
+    assert "long_usd" in payload["liquidations_72h"]
+    # 72h total must be >= 24h total across same fixture
+    assert payload["liquidations_72h"]["long_usd"] >= payload["liquidations_24h"]["long_usd"]
 
 def test_build_derivatives_payload_handles_empty_inputs():
     payload = build_derivatives_payload(
@@ -101,6 +152,47 @@ def test_build_derivatives_payload_degrades_when_oi_is_missing():
     assert payload["funding_rate_annualized_pct"] == 10.95
     assert payload["liquidations_24h"] is not None
     assert "long_usd" in payload["liquidations_24h"]
+
+
+def test_build_derivatives_payload_computes_basis():
+    payload = build_derivatives_payload(
+        open_interest_raw=[],
+        open_interest_history_raw=[],
+        liquidations_raw=[],
+        funding=None,
+        spot_mid=70000.0,
+        perp_mark=70140.0,
+    )
+    assert payload["status"] == "ok"
+    assert payload["spot_mid"] == 70000.0
+    assert payload["perp_mark"] == 70140.0
+    # (70140 - 70000) / 70000 * 100 ≈ 0.2
+    assert payload["basis_vs_spot_pct"] == 0.2
+    assert payload["basis_vs_spot_abs_usd"] == 140.0
+
+
+def test_build_derivatives_payload_exposes_funding_by_venue_and_divergence():
+    payload = build_derivatives_payload(
+        open_interest_raw=[],
+        open_interest_history_raw=[],
+        liquidations_raw=[],
+        funding={"rate_8h_pct": 0.01, "annualized_pct": 10.95},
+        funding_hyperliquid={"rate_8h_pct": 0.03, "annualized_pct": 32.85},
+    )
+    assert payload["funding_by_venue"]["bybit"]["rate_8h_pct"] == 0.01
+    assert payload["funding_by_venue"]["hyperliquid"]["rate_8h_pct"] == 0.03
+    assert payload["funding_divergence_8h_pct"] == 0.02
+
+
+def test_build_derivatives_payload_divergence_null_when_hl_missing():
+    payload = build_derivatives_payload(
+        open_interest_raw=[],
+        open_interest_history_raw=[],
+        liquidations_raw=[],
+        funding={"rate_8h_pct": 0.01, "annualized_pct": 10.95},
+        funding_hyperliquid=None,
+    )
+    assert payload["funding_divergence_8h_pct"] is None
 
 
 def _bar(ts_ms, high, low, close):

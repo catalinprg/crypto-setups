@@ -13,6 +13,9 @@ class OHLC:
     low: float
     close: float
     volume: float
+    # Binance spot klines row[9]. Populated from spot data only — None on
+    # fixtures that pre-date this field. Used for derived taker delta.
+    taker_buy_volume: float | None = None
 
 @dataclass(frozen=True)
 class SwingPair:

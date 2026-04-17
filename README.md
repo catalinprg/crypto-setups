@@ -24,7 +24,7 @@ Per-asset config lives in `config/{asset}.json`:
 }
 ```
 
-Add a new asset by dropping a new JSON file in `config/` and updating `SUPPORTED_ASSETS` in `src/config.py`.
+Add a new asset by dropping a new JSON file in `config/` — the loader discovers it via glob, no code change required.
 
 ## Required environment variables
 
@@ -55,8 +55,9 @@ uv pip install --system httpx requests
 This runs automatically every time a session spins up. Both packages are pure-Python — no compilation needed.
 
 Outbound network allowlist on the cloud environment must include:
-- `data-api.binance.vision` (OHLC)
-- `api.bybit.com` (funding rate)
+- `data-api.binance.vision` (OHLC + spot book ticker for basis)
+- `api.bybit.com` (perp ticker — funding rate + mark price)
+- `api.hyperliquid.xyz` (cross-venue funding)
 - `api.coinalyze.net` (OI, liquidations)
 - `api.notion.com` (publishing)
 - `api.telegram.org` (notifications, optional)

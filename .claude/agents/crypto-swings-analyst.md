@@ -49,17 +49,34 @@ The payload at `data/payload.json` has this shape:
   "derivatives": {
     "status": "ok" | "unavailable",
     "partial": bool,                        // present only when status == "ok"
-    "missing_sections": ["oi" | "liq" | "funding", ...],   // present only when partial == true
+    "missing_sections": ["oi" | "liq" | "funding" | "basis", ...],   // present only when partial == true
     "open_interest_usd": float | null,      // null if OI section missing
-    "open_interest_change_24h_pct": float | null,
-    "funding_rate_8h_pct": float | null,    // null if funding missing
+    "open_interest_change_24h_pct": float | null,  // null when no shared-venue history (not 0.0)
+    "funding_rate_8h_pct": float | null,    // Bybit, primary. null if funding missing
     "funding_rate_annualized_pct": float | null,
+    "funding_by_venue": {
+      "bybit":       {"rate_8h_pct": float | null, "annualized_pct": float | null},
+      "hyperliquid": {"rate_8h_pct": float | null, "annualized_pct": float | null}
+    },
+    "funding_divergence_8h_pct": float | null,   // abs(Bybit - HL) in 8h-% terms; null when either side missing
+    "spot_mid": float | null,                    // Binance spot book mid
+    "perp_mark": float | null,                   // Bybit perp mark
+    "basis_vs_spot_pct": float | null,           // signed: +ve = perp premium
+    "basis_vs_spot_abs_usd": float | null,
     "liquidations_24h": {"long_usd": float, "short_usd": float, "dominant_side": "long" | "short" | "neutral"} | null,
+    "liquidations_72h": {"long_usd": float, "short_usd": float, "dominant_side": "long" | "short" | "neutral"} | null,
     "liquidation_clusters_72h": [
       {"t": int, "total_usd": float, "dominant_side": str,
        "price_high": float | null, "price_low": float | null, "price_close": float | null}
     ],
     "venues_used": ["A", "6", "3"]
+  },
+  "spot_taker_delta_by_tf": {
+    "1h": {"delta_pct": float, "bars": int},
+    "4h": {"delta_pct": float, "bars": int},
+    "1d": {"delta_pct": float, "bars": int}
+    // keys present only when taker volume is available for the TF.
+    // delta_pct > 0 = taker buying dominant, < 0 = taker selling dominant
   }
 }
 ```
@@ -100,7 +117,14 @@ One paragraph, **2–4 hedged Romanian sentences**, that tells the reader what j
 
 - **The 24h move.** Use `change_24h_pct` and put it in context of `daily_atr` when notable (e.g., "un pullback ușor, sub 0.5 ATR", "un rally de aproape 1 ATR"). Skip if the move is trivial.
 - **Position vs structure.** Is price inside a dense cluster? Clean between S/R? Pressing against a zone?
-- **One derivatives signal** — only when `derivatives.status == "ok"` AND the relevant field is non-null AND something is actionable: funding > +15% annualized, funding < −10% annualized, `open_interest_change_24h_pct` past ±5%, or clearly dominant-side 24h liquidations. Never cite a field that is null (on a partial outage the pipeline emits nulls for the section that failed — check `derivatives.missing_sections` to see what is missing). If nothing stands out, skip derivatives entirely — don't fill the slot with "poziționarea pare neutră".
+- **One derivatives signal** — only when `derivatives.status == "ok"` AND the relevant field is non-null AND something is actionable. Candidates, in priority order:
+  - Funding > +15% annualized or < −10% annualized (cite Bybit primary; mention HL only if `funding_divergence_8h_pct` > 0.02 — noteworthy cross-venue split).
+  - `basis_vs_spot_pct` past ±0.10 (perp premium or discount vs spot — positive = crowded longs paying up, negative = shorts pressing).
+  - `open_interest_change_24h_pct` past ±5% (skip silently when null).
+  - Clearly dominant-side 24h liquidations (use `liquidations_24h` for the 24h read; `liquidations_72h` is available if you want to note persistence of the regime across 72h).
+  - A strong **spot_taker_delta_by_tf** reading on 1h or 4h: |delta_pct| > 15 suggests aggressive one-sided taker flow; pair it with price position (e.g. "taker buying dominant pe 4h în timp ce prețul testează rezistența").
+
+  Never cite a field that is null (on a partial outage the pipeline emits nulls for the section that failed — check `derivatives.missing_sections`). If nothing stands out, skip derivatives entirely — don't fill the slot with "poziționarea pare neutră".
 
 No trade calls, no predictions, no wave counts. Hedged language only (*poate, pare, ar putea, probabil, sugerează*). Hard limit: 4 sentences.
 
@@ -119,6 +143,8 @@ Each S/R bullet carries a single Romanian strength label: `confluență puternic
 
 - `funding_rate_annualized_pct` > **+15** AND `liquidations_24h.dominant_side == "long"` → longs crowded → **downgrade every Suport zone by one tier** (flush risk). Rezistență unchanged.
 - `funding_rate_annualized_pct` < **−10** AND `liquidations_24h.dominant_side == "short"` → shorts crowded → **downgrade every Rezistență zone by one tier** (squeeze risk). Suport unchanged.
+- `basis_vs_spot_pct` > **+0.15** (perp running clearly richer than spot) reinforces the longs-crowded branch above: apply the Suport downgrade even if funding alone doesn't trigger it.
+- `basis_vs_spot_pct` < **−0.15** (perp at a clear discount) reinforces the shorts-crowded branch: apply the Rezistență downgrade even if funding alone doesn't trigger it.
 - Otherwise no adjustment.
 
 A zone already at `slabă` stays at `slabă` — no tier below that. If either required field is `null` for a given branch (funding missing, or liquidations missing), skip that branch silently — do not guess.

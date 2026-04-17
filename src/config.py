@@ -3,7 +3,7 @@
 Reads `config/{asset}.json` based on the ASSET env var (default: "btc").
 Exposes a module-level `CONFIG` singleton that other modules import. Keeping
 configuration in JSON files (rather than Python) lets a new asset be added
-without touching code.
+just by dropping a new JSON file in `config/` — no code changes.
 
 The default of "btc" when ASSET is unset preserves local-test and
 legacy-invocation behavior from the btc-swings repo this module was merged
@@ -16,8 +16,12 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-SUPPORTED_ASSETS = ("btc", "eth")
 CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
+
+
+def supported_assets() -> tuple[str, ...]:
+    """Assets currently wired up — one per `config/*.json` file."""
+    return tuple(sorted(p.stem for p in CONFIG_DIR.glob("*.json")))
 
 
 @dataclass(frozen=True)
@@ -31,13 +35,12 @@ class AssetConfig:
 
 def load_config(asset: str) -> AssetConfig:
     asset = asset.lower().strip()
-    if asset not in SUPPORTED_ASSETS:
-        raise ValueError(
-            f"unsupported ASSET={asset!r}; expected one of {SUPPORTED_ASSETS}"
-        )
+    available = supported_assets()
     path = CONFIG_DIR / f"{asset}.json"
     if not path.exists():
-        raise FileNotFoundError(f"config file missing: {path}")
+        raise ValueError(
+            f"unsupported ASSET={asset!r}; expected one of {available}"
+        )
     raw = json.loads(path.read_text())
     return AssetConfig(
         asset=raw["asset"],

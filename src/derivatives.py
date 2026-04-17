@@ -1,13 +1,16 @@
-"""Coinalyze derivatives enrichment.
+"""Derivatives + positioning enrichment.
 
 Env var (required for `fetch_all`, not for pure-function aggregators):
   COINALYZE_API_KEY
 
-Fetches Coinalyze endpoints (OI, liquidations) in parallel across three
-USDT-margined perps (Binance, Bybit, OKX) for the active asset, and funding
-rate from Bybit's public tickers endpoint. Aggregates client-side and
-returns a single derivatives dict for the pipeline payload. Gracefully
-degrades on failure or partial venue coverage.
+Fetches in parallel:
+  - Coinalyze OI + liquidation-history across 3 USDT-M perps (Binance, Bybit, OKX).
+  - Bybit public ticker — funding rate + mark price for the active asset.
+  - Binance spot book-ticker — mid price for basis computation.
+  - Hyperliquid metaAndAssetCtxs — hourly funding for cross-venue divergence.
+
+Aggregates client-side and returns a single derivatives dict for the pipeline
+payload. Gracefully degrades on failure or partial venue coverage.
 """
 import asyncio
 import os
@@ -25,7 +28,13 @@ COINALYZE_BASE = "https://api.coinalyze.net/v1"
 # Bybit over Binance fapi because fapi.binance.com returns 451 from US-based
 # cloud runtimes. Funding on Bybit vs Binance typically diverges by <2 bps
 # in normal conditions — acceptable for positioning context.
-BYBIT_FUNDING_URL = "https://api.bybit.com/v5/market/tickers"
+BYBIT_TICKER_URL = "https://api.bybit.com/v5/market/tickers"
+# Binance spot mirror (same allowlist as klines fetch). Spot mid vs Bybit
+# perp mark gives us basis — a strong premium / discount signal.
+BINANCE_SPOT_TICKER_URL = "https://data-api.binance.vision/api/v3/ticker/bookTicker"
+# Hyperliquid public info endpoint. metaAndAssetCtxs returns current
+# hourly-funding + markPx for every asset in a single call.
+HYPERLIQUID_INFO_URL = "https://api.hyperliquid.xyz/info"
 SYMBOLS = list(CONFIG.coinalyze_symbols)
 LIQUIDATION_WINDOW_HOURS = 72
 LIQUIDATION_INTERVAL = "4hour"
@@ -43,7 +52,10 @@ def aggregate_open_interest(
     current_raw: list[dict], history_raw: list[dict], lookback_buckets: int = BUCKETS_PER_24H
 ) -> dict:
     """Sum current OI across venues. Compute 24h change using only venues
-    with both current and historical data."""
+    with both current and historical data. `change_24h_pct` is None when
+    the change cannot be computed (no shared venues, or the historical
+    total is zero) — the agent prompt treats null as "unavailable" rather
+    than "flat"."""
     current_by_venue = {
         _exchange_code(r["symbol"]): (r.get("value") or 0.0)
         for r in current_raw
@@ -55,7 +67,6 @@ def aggregate_open_interest(
         ex = _exchange_code(r["symbol"])
         hist = r.get("history") or []
         if len(hist) > lookback_buckets:
-            # Compare current to value `lookback_buckets` bars ago
             c = hist[-(lookback_buckets + 1)].get("c")
             if c is not None:
                 history_by_venue[ex] = c
@@ -64,9 +75,9 @@ def aggregate_open_interest(
     if shared:
         now_sum = sum(current_by_venue[v] for v in shared)
         then_sum = sum(history_by_venue[v] for v in shared)
-        change_pct = (now_sum - then_sum) / then_sum * 100 if then_sum else 0.0
+        change_pct: float | None = (now_sum - then_sum) / then_sum * 100 if then_sum else None
     else:
-        change_pct = 0.0
+        change_pct = None
 
     return {
         "total_usd": total_usd,
@@ -76,14 +87,15 @@ def aggregate_open_interest(
 
 
 
-def aggregate_liquidations(liquidations_raw: list[dict], buckets_24h: int = BUCKETS_PER_24H) -> dict:
+def aggregate_liquidations(liquidations_raw: list[dict], num_buckets: int = BUCKETS_PER_24H) -> dict:
     """Sum long- and short-liquidation USD across venues over the last
-    `buckets_24h` buckets."""
+    `num_buckets` buckets. Callers pass `BUCKETS_PER_24H` for a 24h sum
+    and `BUCKETS_PER_24H * 3` for the full 72h window."""
     long_total = 0.0
     short_total = 0.0
     for r in liquidations_raw:
         hist = r.get("history") or []
-        for bucket in hist[-buckets_24h:]:
+        for bucket in hist[-num_buckets:]:
             long_total += bucket.get("l", 0.0) or 0.0
             short_total += bucket.get("s", 0.0) or 0.0
     if long_total == short_total == 0:
@@ -95,12 +107,23 @@ def aggregate_liquidations(liquidations_raw: list[dict], buckets_24h: int = BUCK
     return {"long_usd": long_total, "short_usd": short_total, "dominant_side": side}
 
 
+# MAD scales to stddev-equivalent under normal via *1.4826; the public
+# threshold stays in "sigma equivalents" so existing callers / tests keep
+# their intuition.
+_MAD_TO_SIGMA = 1.4826
+
+
 def detect_clusters(
     liquidations_raw: list[dict], stddev_threshold: float = CLUSTER_STDDEV_THRESHOLD
 ) -> list[dict]:
     """Flag buckets where total (long+short) liquidation USD, summed across
-    venues for that bucket, exceeds mean + stddev_threshold * stddev of the
-    full 72h window."""
+    venues for that bucket, exceeds `median + k * MAD * 1.4826` of the
+    full 72h window (k = `stddev_threshold`, scaled to sigma-equivalents).
+
+    Switched from mean+stddev because a single mega-liquidation bar inflates
+    the stddev enough to swallow every other real cluster. MAD is robust to
+    one-off outliers. Falls back to "strictly above median" when MAD is 0
+    (happens when most buckets carry identical totals)."""
     by_ts: dict[int, dict[str, float]] = {}
     for r in liquidations_raw:
         for bucket in r.get("history") or []:
@@ -111,9 +134,13 @@ def detect_clusters(
     totals = {t: v["l"] + v["s"] for t, v in by_ts.items()}
     if len(totals) < 3:
         return []
-    mean_total = statistics.mean(totals.values())
-    sd = statistics.pstdev(totals.values())
-    threshold = mean_total + stddev_threshold * sd
+    values = list(totals.values())
+    med = statistics.median(values)
+    mad = statistics.median([abs(v - med) for v in values])
+    if mad > 0:
+        threshold = med + stddev_threshold * _MAD_TO_SIGMA * mad
+    else:
+        threshold = med
     clusters = []
     for t in sorted(by_ts.keys()):
         total = totals[t]
@@ -155,22 +182,43 @@ def enrich_clusters_with_price(
     return enriched
 
 
+def _empty_funding() -> dict:
+    return {"rate_8h_pct": None, "annualized_pct": None}
+
+
+def _compute_basis(spot_mid: float | None, perp_mark: float | None) -> dict:
+    """Perp mark vs spot mid. `pct` is signed: positive = perp premium over
+    spot, negative = perp discount. None when either input is missing."""
+    if spot_mid is None or perp_mark is None or spot_mid <= 0:
+        return {"pct": None, "abs_usd": None}
+    abs_usd = perp_mark - spot_mid
+    return {
+        "pct": round(abs_usd / spot_mid * 100, 4),
+        "abs_usd": round(abs_usd, 2),
+    }
+
+
 def build_derivatives_payload(
     *,
     open_interest_raw: list[dict],
     open_interest_history_raw: list[dict],
     liquidations_raw: list[dict],
     funding: dict | None = None,
+    funding_hyperliquid: dict | None = None,
+    spot_mid: float | None = None,
+    perp_mark: float | None = None,
 ) -> dict:
     """Assemble the derivatives payload. Degrades per-section on partial
     upstream failure: fields from a missing source are set to None instead
     of faking a zero. status=unavailable only when every source is empty."""
-    funding = funding or {"rate_8h_pct": None, "annualized_pct": None}
+    funding = funding or _empty_funding()
+    funding_hyperliquid = funding_hyperliquid or _empty_funding()
     has_oi = bool(open_interest_raw)
     has_liq = bool(liquidations_raw)
     has_funding = funding.get("annualized_pct") is not None
+    has_basis = spot_mid is not None and perp_mark is not None
 
-    if not (has_oi or has_liq or has_funding):
+    if not (has_oi or has_liq or has_funding or has_basis):
         return {"status": "unavailable", "error": "no data"}
 
     if has_oi:
@@ -184,16 +232,35 @@ def build_derivatives_payload(
         oi_venues = []
 
     if has_liq:
-        liq = aggregate_liquidations(liquidations_raw)
+        liq_24h = aggregate_liquidations(liquidations_raw, num_buckets=BUCKETS_PER_24H)
+        liq_72h = aggregate_liquidations(liquidations_raw, num_buckets=BUCKETS_PER_24H * 3)
         clusters = detect_clusters(liquidations_raw)
     else:
-        liq = None
+        liq_24h = None
+        liq_72h = None
         clusters = []
 
     missing = [
-        name for name, present in (("oi", has_oi), ("liq", has_liq), ("funding", has_funding))
+        name for name, present in (
+            ("oi", has_oi),
+            ("liq", has_liq),
+            ("funding", has_funding),
+            ("basis", has_basis),
+        )
         if not present
     ]
+
+    basis = _compute_basis(spot_mid, perp_mark)
+
+    # Cross-venue funding divergence — abs delta in 8h terms between Bybit
+    # and Hyperliquid. Non-null only when both sides reported. Used by the
+    # agent to flag single-venue funding anomalies.
+    hl_8h = funding_hyperliquid.get("rate_8h_pct")
+    bybit_8h = funding.get("rate_8h_pct")
+    if hl_8h is not None and bybit_8h is not None:
+        funding_divergence_8h_pct = round(abs(bybit_8h - hl_8h), 4)
+    else:
+        funding_divergence_8h_pct = None
 
     return {
         "status": "ok",
@@ -203,19 +270,31 @@ def build_derivatives_payload(
         "open_interest_change_24h_pct": oi_change,
         "funding_rate_8h_pct": funding["rate_8h_pct"],
         "funding_rate_annualized_pct": funding["annualized_pct"],
-        "liquidations_24h": liq,
+        "funding_by_venue": {
+            "bybit": funding,
+            "hyperliquid": funding_hyperliquid,
+        },
+        "funding_divergence_8h_pct": funding_divergence_8h_pct,
+        "spot_mid": spot_mid,
+        "perp_mark": perp_mark,
+        "basis_vs_spot_pct": basis["pct"],
+        "basis_vs_spot_abs_usd": basis["abs_usd"],
+        "liquidations_24h": liq_24h,
+        "liquidations_72h": liq_72h,
         "liquidation_clusters_72h": clusters,
         "venues_used": oi_venues,
     }
 
 
-async def fetch_funding_rate(client: httpx.AsyncClient) -> dict:
-    """Fetch funding rate for the active asset from Bybit's public tickers
-    endpoint. Returns {rate_8h_pct, annualized_pct} or {None, None} on failure."""
+async def fetch_bybit_ticker(client: httpx.AsyncClient) -> dict:
+    """Fetch Bybit ticker for the active asset perp: funding rate + mark
+    price in one call. Returns {rate_8h_pct, annualized_pct, mark_price}
+    or all-None on failure."""
+    empty = {"rate_8h_pct": None, "annualized_pct": None, "mark_price": None}
     for attempt in range(2):
         try:
             r = await client.get(
-                BYBIT_FUNDING_URL,
+                BYBIT_TICKER_URL,
                 params={"category": "linear", "symbol": CONFIG.symbol},
                 timeout=TIMEOUT,
             )
@@ -223,15 +302,76 @@ async def fetch_funding_rate(client: httpx.AsyncClient) -> dict:
             data = r.json()
             ticker = data["result"]["list"][0]
             fr = float(ticker.get("fundingRate") or 0.0)
+            mark = ticker.get("markPrice")
             return {
                 "rate_8h_pct": fr * 100,
                 "annualized_pct": fr * 3 * 365 * 100,
+                "mark_price": float(mark) if mark is not None else None,
             }
         except (httpx.HTTPError, ValueError, KeyError, TypeError, IndexError):
             if attempt == 1:
-                return {"rate_8h_pct": None, "annualized_pct": None}
+                return empty
             await asyncio.sleep(2)
-    return {"rate_8h_pct": None, "annualized_pct": None}
+    return empty
+
+
+async def fetch_binance_spot_mid(client: httpx.AsyncClient) -> float | None:
+    """Fetch Binance spot book ticker for the active asset and return the
+    mid price. None on failure. Same CDN as the klines fetch — no extra
+    outbound host required."""
+    for attempt in range(2):
+        try:
+            r = await client.get(
+                BINANCE_SPOT_TICKER_URL,
+                params={"symbol": CONFIG.symbol},
+                timeout=TIMEOUT,
+            )
+            r.raise_for_status()
+            data = r.json()
+            bid = float(data["bidPrice"])
+            ask = float(data["askPrice"])
+            if bid <= 0 or ask <= 0:
+                return None
+            return (bid + ask) / 2
+        except (httpx.HTTPError, ValueError, KeyError, TypeError):
+            if attempt == 1:
+                return None
+            await asyncio.sleep(2)
+    return None
+
+
+async def fetch_hyperliquid_funding(client: httpx.AsyncClient) -> dict:
+    """Hyperliquid publishes HOURLY funding (not 8h like CEX perps). We
+    normalize to the CEX convention so the agent can compare like-for-like.
+    Maps the active asset to HL's coin symbol (btc→BTC, eth→ETH)."""
+    empty = {"rate_8h_pct": None, "annualized_pct": None}
+    coin = CONFIG.asset.upper()
+    for attempt in range(2):
+        try:
+            r = await client.post(
+                HYPERLIQUID_INFO_URL,
+                json={"type": "metaAndAssetCtxs"},
+                headers={"Content-Type": "application/json"},
+                timeout=TIMEOUT,
+            )
+            r.raise_for_status()
+            data = r.json()
+            meta, ctxs = data[0], data[1]
+            universe = meta.get("universe", [])
+            idx = next((i for i, a in enumerate(universe) if a.get("name") == coin), None)
+            if idx is None or idx >= len(ctxs):
+                return empty
+            hourly = float(ctxs[idx].get("funding") or 0.0)
+            # Hourly → 8h equivalent, and hourly → annualized (24 * 365).
+            return {
+                "rate_8h_pct": hourly * 8 * 100,
+                "annualized_pct": hourly * 24 * 365 * 100,
+            }
+        except (httpx.HTTPError, ValueError, KeyError, TypeError, IndexError):
+            if attempt == 1:
+                return empty
+            await asyncio.sleep(2)
+    return empty
 
 
 async def _get(client: httpx.AsyncClient, path: str, params: dict) -> Any:
@@ -255,16 +395,17 @@ async def _get(client: httpx.AsyncClient, path: str, params: dict) -> Any:
 
 
 async def fetch_all() -> dict:
-    """Fetch Coinalyze OI/liquidation endpoints and Bybit funding in parallel.
-    Uses return_exceptions so a single endpoint outage (e.g. Coinalyze 503
-    on /open-interest only) does not discard the other sections. The builder
-    then degrades per-section with explicit nulls."""
+    """Fetch Coinalyze OI/liquidation endpoints, Bybit ticker, Binance spot
+    mid, and Hyperliquid funding — all in parallel. Uses return_exceptions
+    so a single endpoint outage (e.g. Coinalyze 503 on /open-interest only)
+    does not discard the other sections. The builder then degrades
+    per-section with explicit nulls."""
     now = int(time.time())
     from_ts = now - LIQUIDATION_WINDOW_HOURS * 3600
     syms = ",".join(SYMBOLS)
 
     async with httpx.AsyncClient() as client:
-        oi, oi_hist, liq, funding = await asyncio.gather(
+        oi, oi_hist, liq, bybit_ticker, spot_mid, hl_funding = await asyncio.gather(
             _get(client, "/open-interest", {"symbols": syms, "convert_to_usd": "true"}),
             _get(client, "/open-interest-history", {
                 "symbols": syms, "interval": LIQUIDATION_INTERVAL,
@@ -274,7 +415,9 @@ async def fetch_all() -> dict:
                 "symbols": syms, "interval": LIQUIDATION_INTERVAL,
                 "from": from_ts, "to": now, "convert_to_usd": "true",
             }),
-            fetch_funding_rate(client),
+            fetch_bybit_ticker(client),
+            fetch_binance_spot_mid(client),
+            fetch_hyperliquid_funding(client),
             return_exceptions=True,
         )
 
@@ -284,9 +427,20 @@ async def fetch_all() -> dict:
     def _ok_dict(v, default):
         return v if isinstance(v, dict) else default
 
+    def _ok_float(v):
+        return v if isinstance(v, (int, float)) else None
+
+    bybit = _ok_dict(bybit_ticker, {"rate_8h_pct": None, "annualized_pct": None, "mark_price": None})
+    funding = {"rate_8h_pct": bybit.get("rate_8h_pct"), "annualized_pct": bybit.get("annualized_pct")}
+    perp_mark = bybit.get("mark_price")
+    spot = _ok_float(spot_mid)
+
     return build_derivatives_payload(
         open_interest_raw=_ok_list(oi),
         open_interest_history_raw=_ok_list(oi_hist),
         liquidations_raw=_ok_list(liq),
-        funding=_ok_dict(funding, {"rate_8h_pct": None, "annualized_pct": None}),
+        funding=funding,
+        funding_hyperliquid=_ok_dict(hl_funding, _empty_funding()),
+        spot_mid=spot,
+        perp_mark=perp_mark,
     )
