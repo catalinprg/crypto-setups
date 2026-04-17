@@ -1,26 +1,35 @@
 ---
 name: crypto-swings
-description: Full crypto swings analysis pipeline for a single asset (BTC or ETH). Fetches OHLC from Binance across 5 timeframes + derivatives (OI, funding, liquidations) from Coinalyze/Bybit, computes Fibonacci confluence zones, dispatches the crypto-swings-analyst agent to produce a hedged Romanian briefing, publishes to Notion under the asset's Swings parent, notifies Telegram. Takes an `asset` argument (`btc` or `eth`). Use when the user wants BTC or ETH S/R analysis, swing levels, or a trading briefing.
+description: Full crypto swings analysis pipeline. Fetches OHLC from Binance across 5 timeframes + derivatives (OI, funding, liquidations) from Coinalyze/Bybit, computes Fibonacci confluence zones, dispatches the crypto-swings-analyst agent to produce a hedged Romanian briefing, publishes to Notion under the asset's Swings parent, notifies Telegram. Takes an `asset` argument — `btc`, `eth`, or `all` (runs both sequentially in one session to conserve Routines quota). Use when the user wants BTC or ETH S/R analysis, swing levels, or a trading briefing.
 ---
 
-You are executing the crypto-swings analysis pipeline for a single asset.
+You are executing the crypto-swings analysis pipeline.
 
 ## Arguments
 
-- `asset` — one of `btc` or `eth`. Required. The entire pipeline runs for this asset only; to brief both, run the skill twice.
+- `asset` — one of `btc`, `eth`, or `all`. Required.
+  - `btc` / `eth` — run the pipeline for that asset only.
+  - `all` — run the full pipeline for BTC, then for ETH, sequentially, in a single session. Used by the consolidated Routines trigger to produce both briefings in one scheduled run (halves the Routines quota cost).
 
-If the argument is missing or not one of `btc` / `eth`, stop and ask the user which asset to run.
+If the argument is missing or not one of `btc` / `eth` / `all`, stop and ask the user which asset to run.
+
+## Dispatch
+
+- **`asset == btc` or `asset == eth`:** execute Steps 1–6 once for that asset.
+- **`asset == all`:** execute Steps 1–6 first for `btc`, then for `eth`. Each asset runs as an **independent unit with its own error handling** — a failure in BTC must NOT skip ETH. Collect per-asset outcomes and report both at the end (see "Step 6 — Confirm" below for the `all` reporting format).
 
 ## Step 1 — Refresh repo and emit payload
 
-Run these from the repo root in order. Export `ASSET` so every downstream call sees it:
+Run these from the repo root in order. Export `ASSET` so every downstream call sees it. In `all` mode, re-export `ASSET` before each asset's run:
 
 ```bash
-export ASSET=<asset>         # btc or eth
+export ASSET=<asset>         # btc or eth (NOT "all" — always a specific asset here)
 git checkout main
 git pull --ff-only
 python3 -m scripts.emit_payload data/payload.json
 ```
+
+(In `all` mode, `git checkout main` / `git pull` only needs to run once — before the first asset. Just re-export `ASSET` between assets.)
 
 `git checkout main` ensures HEAD is on the canonical branch — resumed cloud environments may still be on a prior `claude/...` branch from an earlier run, which would make `git pull --ff-only` fail. `git pull --ff-only` then picks up any code changes since the session started.
 
@@ -30,7 +39,9 @@ Required env vars (set on the cloud environment, not committed):
 - `ASSET` — `btc` or `eth`. Selects which config file is loaded.
 - `COINALYZE_API_KEY` — for OI and liquidation data. If unset, the derivatives section degrades to `status=unavailable` and the pipeline continues with pure fib analysis.
 
-Wait for the command to complete. If it exits with a non-zero code or logs a fatal error, stop and report the failure. Do not proceed with stale or missing data.
+Wait for the command to complete. If it exits with a non-zero code or logs a fatal error:
+- In single-asset mode: stop and report the failure.
+- In `all` mode: record the failure for this asset (see Step 6) and **continue with the next asset** (re-start Step 1 for the next asset). Do not abort the whole session on one asset's failure.
 
 The last line of stdout confirms what was emitted, e.g.:
 ```
@@ -46,7 +57,7 @@ Run:
 echo $(date +%Y%m%d_%H%M%S)
 ```
 
-Use that value as TIMESTAMP (e.g. `20260417_064530`). This will be the Notion page title.
+Use that value as TIMESTAMP (e.g. `20260417_064530`). This will be the Notion page title. In `all` mode, capture a fresh TIMESTAMP for each asset.
 
 ## Step 3 — Dispatch crypto-swings-analyst agent
 
@@ -60,6 +71,8 @@ Write your complete briefing as Markdown to data/briefing.md using the Write too
 
 That is the complete prompt. Do not add more context — the agent has its full instructions (role, language rules, analysis framework, output format) embedded, and reads the asset identity from the payload's `asset` / `display_name` fields.
 
+In `all` mode, the agent overwrites `data/briefing.md` each time — this is expected. Step 4 must run immediately after the agent returns and before the next asset overwrites the file.
+
 ## Step 4 — Publish to Notion
 
 Once the agent returns `done data/briefing.md`, run:
@@ -72,11 +85,24 @@ Substitute the actual TIMESTAMP from Step 2. `publish_notion.py` reads `ASSET` a
 
 Required env var: `NOTION_TOKEN` (Notion Internal Integration Token). The parent page for the active asset must be shared with the integration.
 
-If the script exits with a non-zero code, capture stderr and report the failure to the user.
+If the script exits with a non-zero code, capture stderr. In single-asset mode report and stop. In `all` mode record the failure for this asset and continue with the next asset.
 
 ## Step 5 — Notify Telegram (non-fatal)
 
-After a successful publish, fire the Telegram notification:
+Telegram expects `TELEGRAM_BOT_TOKEN` (shared across assets — one bot) and `TELEGRAM_CHAT_ID` (asset-specific channel). How it's resolved depends on the invocation mode:
+
+**Single-asset mode (`btc` or `eth`):** `TELEGRAM_CHAT_ID` is set directly by the Routines trigger env. No extra work — just fire the notification.
+
+**`all` mode:** the Routines trigger sets two separate chat-id env vars, and the skill exports the right one before each asset's notification:
+
+```bash
+# Before BTC's notification:
+export TELEGRAM_CHAT_ID="$TELEGRAM_CHAT_ID_BTC"
+# Before ETH's notification:
+export TELEGRAM_CHAT_ID="$TELEGRAM_CHAT_ID_ETH"
+```
+
+Then fire the notification:
 
 ```bash
 python3 notify_telegram.py "$(echo $ASSET | tr a-z A-Z) Swings briefing published $(date +%Y-%m-%d\ %H:%M)
@@ -85,19 +111,30 @@ python3 notify_telegram.py "$(echo $ASSET | tr a-z A-Z) Swings briefing publishe
 
 Substitute `<notion_url>` with the URL printed by `publish_notion.py`.
 
-Required env vars (per-asset values set by the Routines trigger):
-- `TELEGRAM_BOT_TOKEN` — bot token from @BotFather
-- `TELEGRAM_CHAT_ID`   — asset-specific chat ID
+Required env vars:
+- Single-asset mode: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
+- `all` mode: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID_BTC`, `TELEGRAM_CHAT_ID_ETH`.
 
-The script is idempotent: if either env var is unset it exits 0 silently. If the API call fails, it exits non-zero — treat that as non-fatal and continue to Step 6. Do not fail the whole pipeline on a notification error.
+The script is idempotent: if either `TELEGRAM_BOT_TOKEN` or the resolved `TELEGRAM_CHAT_ID` is unset, it exits 0 silently. If the API call fails, it exits non-zero — treat that as non-fatal. Do not fail the whole pipeline on a notification error.
 
 ## Step 6 — Confirm
 
-Report to the user:
+**Single-asset mode** — report one outcome to the user:
 - **On success:** `Analysis uploaded to Notion: <notion_url>`
 - **On agent failure:** `$ASSET Swings failed at analysis step: <error from agent>`
 - **On publish failure:** `$ASSET Swings failed at publish step: <stderr>`
-
-If Step 5 failed (Telegram API error), append a second line: `Telegram notification failed: <stderr>`.
+- If Step 5 failed (Telegram API error), append a second line: `Telegram notification failed: <stderr>`.
 
 Do not include multiple outcomes. Do not wrap the URL in extra commentary.
+
+**`all` mode** — after both assets have run (or attempted to run), report one consolidated message with one line per asset:
+
+```
+Crypto Swings (all):
+- BTC: <notion_url>   ← or: BTC: failed at <step> — <error summary>
+- ETH: <notion_url>   ← or: ETH: failed at <step> — <error summary>
+```
+
+If any asset's Telegram failed non-fatally, append a trailing line: `Telegram notification failed for: BTC` (or `ETH`, or `BTC, ETH`).
+
+Do not return early just because one asset failed — always report the final state of both.
