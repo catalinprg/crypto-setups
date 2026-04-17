@@ -15,6 +15,7 @@ import sys
 from datetime import datetime, timezone
 
 from src import derivatives as derivatives_mod
+from src import liquidity as liquidity_mod
 from src.config import CONFIG
 from src.confluence import cluster, split_by_price
 from src.fetch import fetch_all, taker_delta_per_tf
@@ -70,6 +71,13 @@ async def build():
             deriv["liquidation_clusters_72h"], ohlc["4h"]
         )
 
+    liquidity_pools = liquidity_mod.compute_pools(
+        swing_pairs=all_pairs,
+        ohlc=ohlc,
+        current_price=current_price,
+        daily_atr=daily_atr,
+    )
+
     return {
         "asset": CONFIG.asset,
         "display_name": CONFIG.display_name,
@@ -83,6 +91,7 @@ async def build():
         "support": [z_to_dict(z) for z in support[:8]],
         "derivatives": deriv,
         "spot_taker_delta_by_tf": taker_delta_per_tf(ohlc),
+        "liquidity": liquidity_pools,
     }
 
 

@@ -77,6 +77,23 @@ The payload at `data/payload.json` has this shape:
     "1d": {"delta_pct": float, "bars": int}
     // keys present only when taker volume is available for the TF.
     // delta_pct > 0 = taker buying dominant, < 0 = taker selling dominant
+  },
+  "liquidity": {
+    "buy_side": [
+      {
+        "price":           float,        // representative level (top of cluster for BSL)
+        "price_range":     [min, max],
+        "type":            "BSL",        // buy-side = stops above a swing high
+        "touches":         int,          // how many swing highs are in the cluster
+        "tfs":             ["1w", "1d"], // contributing TFs, highest-weight first
+        "most_recent_ts":  int,          // ms since epoch
+        "age_hours":       int,
+        "swept":           bool,         // did price trade beyond since formation
+        "distance_pct":    float,        // signed vs current_price (+ve = above)
+        "strength_score":  int           // TF_WEIGHTS sum × touches
+      }
+    ],
+    "sell_side": [ /* same shape, type "SSL", distance_pct negative */ ]
   }
 }
 ```
@@ -153,6 +170,34 @@ If a downgrade was applied, add one short sentence at the end of **Pe scurt** so
 
 **Differentiate.** If every bullet ends up "puternică", you are not interpreting — re-rank. Do **not** list the contributing fibs in the bullet; the raw `contributing_levels` stay in the payload for your reasoning only.
 
+### Liquidity pools (separate layer from fib confluence)
+
+The `liquidity` section of the payload lists stop-cluster proxies derived from swing pivots — **buy-side liquidity** (BSL, above swing highs where long stops and short entries rest) and **sell-side liquidity** (SSL, below swing lows). Price is drawn toward unswept pools because that's where size can fill; swept pools are spent and less magnetic.
+
+This is a **second, orthogonal signal** — do NOT merge it into the `confluență` label. That label stays reserved for structural fib agreement. Liquidity gets its own treatment:
+
+**1. Pool overlaps a fib zone** (pool `price` is inside a listed Rezistență/Suport zone's `min_price`–`max_price`, OR within one `daily_atr` of it):
+- Append a compact tag to that zone's bullet, AFTER any `long-liq`/`short-liq` tag.
+- Format: `· BSL-pool ~Nh` (for buy-side) or `· SSL-pool ~Nh`.
+- If the pool's `swept == true`, append `(swept)` — it's still worth mentioning as a reference level but weakens the pull.
+- Stack with touches when interesting: `· BSL-pool 3× 1w+1d` when `touches >= 3` and a high-TF is present. Keep tags short.
+
+**2. Pool sits alone in dead space** (no fib zone within `daily_atr`, and `swept == false`, and in the top 2 of its side by `strength_score`):
+- Emit under a new `### Zone de liquidity` section after Suport and before De urmărit.
+- Format: `- **$X** (±X.X%) — BSL unswept · 1w+1d · Nx touches · ~Nh`.
+- Use **magnet language**, not S/R language. In Pe scurt or De urmărit, phrase as *"zona de liquidity de la $X poate atrage prețul ca țintă"* — never *"suport puternic"*.
+- Skip pools with `swept == true` from this section — they've already delivered their magnetism.
+- Cap: at most 2 bullets. If nothing qualifies, omit the entire section (silent — don't emit "fără zone").
+
+**3. Pools that conflict with the fib zone they overlap** (e.g. a strong BSL pool sits just above a Rezistență zone): do NOT downgrade the confluență tier — just mention the pool is above ("*o pool BSL la $X peste zonă poate menține presiunea ascendentă până la sweep*") in Pe scurt if the story is clean. Otherwise stay silent.
+
+**Ranking.** When choosing which pools to surface (ties broken by `strength_score`):
+- Always prefer unswept over swept.
+- Prefer pools in the top-2 strength on their side.
+- Skip pools with `age_hours > 720` (~30 days) unless their strength_score is clearly dominant — very old pools often reflect structure that has moved.
+
+**Never list the touches or contributing TFs in prose** — those live in the tag / bullet only.
+
 ### Per-zone liquidation cluster tags
 
 When a 72h liquidation cluster's price range (`price_low`–`price_high`) overlaps or sits immediately adjacent to a zone's `min_price`–`max_price`, append a compact tag to that bullet:
@@ -209,9 +254,14 @@ The `data/briefing.md` file content should follow this exact structure:
 ### Suport
 
 - **[zona curentă] $X–$Y** — confluență medie   ← dacă e cazul
-- **$X–$Y** (−X.X%) — confluență puternică · long-liq ~28h
-- **$X–$Y** (−X.X%) — confluență slabă
+- **$X–$Y** (−X.X%) — confluență puternică · long-liq ~28h · SSL-pool 3× 1w+1d
+- **$X–$Y** (−X.X%) — confluență slabă · BSL-pool ~12h (swept)
 - ...
+
+### Zone de liquidity   ← only when standalone unswept pools exist; omit otherwise
+
+- **$X** (+X.X%) — BSL unswept · 1w+1d · 2× touches · ~40h
+- **$X** (−X.X%) — SSL unswept · 1d · 1× touch · ~18h
 
 ### De urmărit
 

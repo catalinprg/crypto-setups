@@ -73,6 +73,10 @@ In a Claude Code cloud session pointed at this repo, run:
 
 The skill runs the full pipeline for the given asset and replies with the Notion URL.
 
+## Liquidity pools (separate layer from fib confluence)
+
+Alongside the fib zones, the payload now carries a `liquidity` section with buy-side (BSL, above swing highs) and sell-side (SSL, below swing lows) pool proxies derived from the same swing pivots. Pools are clustered with the `0.25 × daily_ATR` radius, ranked by unswept-first then by `TF_WEIGHTS × touches`, and filtered to within ±20% of price. The agent uses pool overlap with a fib zone to append tags like `· BSL-pool ~18h (3× 1w+1d)` and emits standalone unswept pools in a separate `### Zone de liquidity` section with magnet language — never as support/rezistență.
+
 ## What the output looks like
 
 The briefing is written in Romanian with English trading terms. Example (BTC):
