@@ -88,7 +88,7 @@ def _find_idx_for_ts(bars: list[OHLC], target_ts: int) -> int | None:
     return None
 
 
-def _session_start_ts(last_ts_ms: int) -> int:
+def _day_start_ts(last_ts_ms: int) -> int:
     dt = datetime.fromtimestamp(last_ts_ms / 1000, tz=timezone.utc)
     day = dt.replace(hour=0, minute=0, second=0, microsecond=0)
     return int(day.timestamp() * 1000)
@@ -119,7 +119,7 @@ def resolve_anchors(
     last_ts = bars[-1].ts
 
     for anchor_type, ts in [
-        ("AVWAP_SESSION", _session_start_ts(last_ts)),
+        ("AVWAP_SESSION", _day_start_ts(last_ts)),
         ("AVWAP_WEEK",    _week_start_ts(last_ts)),
         ("AVWAP_MONTH",   _month_start_ts(last_ts)),
     ]:

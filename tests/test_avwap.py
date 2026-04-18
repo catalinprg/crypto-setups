@@ -1,3 +1,5 @@
+import math
+
 from src.avwap import compute_avwap, resolve_anchors, AnchoredVwap
 from src.types import OHLC, SwingPair
 
@@ -31,3 +33,9 @@ def test_resolve_anchors_includes_session_week_month_and_swings():
     assert "AVWAP_MONTH"   in types
     assert "AVWAP_SWING_HH" in types
     assert "AVWAP_SWING_LL" in types
+
+def test_avwap_pre_anchor_entries_are_nan():
+    bars = [_b(i*1000, 101, 99, 100, 1.0) for i in range(5)]
+    out = compute_avwap(bars, anchor_idx=2, anchor_type="AVWAP_SESSION", anchor_ts=2000)
+    assert all(math.isnan(out.vwap[i]) for i in range(2))
+    assert not math.isnan(out.vwap[2])
