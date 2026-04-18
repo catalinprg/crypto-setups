@@ -53,7 +53,12 @@ def detect_fvgs(
     stale_after: int = DEFAULT_STALE_AFTER,
 ) -> list[FVG]:
     """Scan 3-bar windows; report every FVG formed in the window, with
-    mitigation and stale flags computed against all subsequent bars."""
+    mitigation and stale flags computed against all subsequent bars.
+
+    When atr_14 is 0 or negative, the minimum-gap filter is disabled
+    (all non-zero gaps pass through) — appropriate when calibration data
+    is unavailable.
+    """
     if len(bars) < 3:
         return []
 

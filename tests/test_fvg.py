@@ -63,3 +63,11 @@ def test_minimum_gap_atr_filter_passes_significant_gaps():
     fvgs = detect_fvgs(bars, tf="1h", atr_14=1.0, stale_after=100)
     bulls = [f for f in fvgs if f.type == "FVG_BULL"]
     assert len(bulls) == 1
+
+
+def test_atr_zero_disables_gap_filter():
+    # atr_14=0 → min_gap=0.0 → all non-zero gaps pass through.
+    # This is intentional: no ATR means no calibration, so we don't filter.
+    bars = [_b(0, 100, 98), _b(1, 103, 99, c=102.5), _b(2, 105, 100.001)]
+    fvgs = detect_fvgs(bars, tf="1h", atr_14=0.0, stale_after=100)
+    assert len([f for f in fvgs if f.type == "FVG_BULL"]) == 1
