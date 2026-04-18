@@ -1,33 +1,32 @@
 from datetime import datetime, timezone
 from src.config import CONFIG
-from src.types import Zone, Timeframe
 
 NOTION_PARENT_ID = CONFIG.notion_parent_id
 
-def _format_zone(z: Zone, current_price: float) -> str:
-    dist_abs = z.mid - current_price
-    dist_pct = (dist_abs / current_price) * 100
-    sources = sorted(
-        {f"{l.tf} {l.ratio}" for l in z.levels}
-    )
+
+def _format_zone(z: dict, current_price: float) -> str:
+    min_p, max_p, score = z["min_price"], z["max_price"], z["score"]
+    dist_pct = z["distance_pct"]
+    sources = z["sources"]
     price_str = (
-        f"${z.min_price:,.0f}" if z.min_price == z.max_price
-        else f"${z.min_price:,.0f}–${z.max_price:,.0f}"
+        f"${min_p:,.0f}" if min_p == max_p
+        else f"${min_p:,.0f}–${max_p:,.0f}"
     )
     return (
-        f"- **{price_str}** (score {z.score}, {dist_pct:+.2f}%) — "
-        f"{' + '.join(sources)}"
+        f"- **{price_str}** (score {score}, {dist_pct:+.2f}%) — "
+        f"{z['classification']} · {', '.join(sources[:4])}"
     )
+
 
 def build_page_payload(
     *,
     current_price: float,
     change_24h_pct: float,
     atr_daily: float,
-    support: list[Zone],
-    resistance: list[Zone],
-    contributing_tfs: list[Timeframe],
-    skipped_tfs: list[Timeframe],
+    support: list[dict],
+    resistance: list[dict],
+    contributing_tfs: list[str],
+    skipped_tfs: list[str],
     parent_page_id: str,
     top_n: int = 5,
 ) -> dict:

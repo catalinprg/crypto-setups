@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 Timeframe = Literal["1M", "1w", "1d", "4h", "1h"]
@@ -51,3 +51,36 @@ LEVEL_WEIGHTS: dict[float, int] = {
 }
 RETRACEMENT_RATIOS = (0.236, 0.382, 0.5, 0.618, 0.786)
 EXTENSION_RATIOS = (1.272, 1.618)
+
+LevelSource = Literal[
+    # Fibonacci
+    "FIB_236", "FIB_382", "FIB_500", "FIB_618", "FIB_786",
+    "FIB_1272", "FIB_1618",
+    # Liquidity pools (from swing pivots)
+    "LIQ_BSL", "LIQ_SSL",
+    # Volume profile
+    "POC", "VAH", "VAL", "HVN", "LVN",
+    "NAKED_POC_D", "NAKED_POC_W", "NAKED_POC_M",
+    # Anchored VWAP
+    "AVWAP_SESSION", "AVWAP_WEEK", "AVWAP_MONTH",
+    "AVWAP_SWING_HH", "AVWAP_SWING_LL", "AVWAP_EVENT",
+    "AVWAP_BAND_1SD_UP", "AVWAP_BAND_1SD_DOWN",
+    "AVWAP_BAND_2SD_UP", "AVWAP_BAND_2SD_DOWN",
+    # FVG / Order Blocks
+    "FVG_BULL", "FVG_BEAR",
+    "OB_BULL", "OB_BEAR",
+    # Market structure key levels
+    "MS_BOS_LEVEL", "MS_CHOCH_LEVEL", "MS_INVALIDATION",
+]
+
+@dataclass(frozen=True)
+class Level:
+    """Canonical source-tagged level, used for unified confluence clustering."""
+    price: float              # representative price (single-point or zone midpoint)
+    min_price: float          # for zone sources (FVG, OB, VP value area); = price for point sources
+    max_price: float          # idem
+    source: LevelSource
+    tf: Timeframe
+    strength: float           # 0-1 normalized source-specific strength
+    age_bars: int
+    meta: dict = field(default_factory=dict)

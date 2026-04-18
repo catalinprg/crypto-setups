@@ -4,14 +4,20 @@ from src import fetch as fetch_mod
 from src import main as main_mod
 from src import telegram_notify
 from src import derivatives as derivatives_mod
+from src import venue_aggregator as venue_agg_mod
+
 
 @pytest.mark.asyncio
 async def test_full_pipeline_produces_notion_payload_and_calls_telegram(monkeypatch):
-    # Stub Binance
+    # Stub Binance OHLC
     async def fake_fetch_all():
         return synthetic_all()
     monkeypatch.setattr(fetch_mod, "fetch_all", fake_fetch_all)
-    monkeypatch.setattr(main_mod, "fetch_all", fake_fetch_all)
+
+    # Stub cross-venue fetches so no network calls from emit_payload
+    async def fake_fetch_all_venues(symbol, tf, limit):
+        return {"bybit": [], "coinbase": []}
+    monkeypatch.setattr(venue_agg_mod, "fetch_all_venues", fake_fetch_all_venues)
 
     # Capture Notion write
     captured_payload = {}
@@ -42,6 +48,13 @@ async def test_full_pipeline_produces_notion_payload_and_calls_telegram(monkeypa
         }
     monkeypatch.setattr(derivatives_mod, "fetch_all", fake_derivatives_fetch_all)
     monkeypatch.setattr(main_mod.derivatives_mod, "fetch_all", fake_derivatives_fetch_all)
+
+    # emit_payload imports fetch_all / fetch_all_venues / derivatives by name.
+    # Also patch its module-level refs so the stubs actually take effect.
+    from scripts import emit_payload as emit_mod
+    monkeypatch.setattr(emit_mod, "fetch_all", fake_fetch_all)
+    monkeypatch.setattr(emit_mod, "fetch_all_venues", fake_fetch_all_venues)
+    monkeypatch.setattr(emit_mod.derivatives_mod, "fetch_all", fake_derivatives_fetch_all)
 
     exit_code = await main_mod.run()
 
