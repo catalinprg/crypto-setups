@@ -6,10 +6,10 @@ far more than raw level count — two sources agreeing is a stronger signal
 than five fib retracements from the same swing.
 """
 from __future__ import annotations
-from dataclasses import dataclass, field
-from typing import Iterable
+from dataclasses import dataclass
+from typing import Iterable, Literal
 
-from src.types import Level, TF_WEIGHTS, Timeframe
+from src.types import Level, TF_WEIGHTS
 
 # Canonical single-source family groupings — rules out "two kinds of FIB"
 # being counted as multi-source confluence.
@@ -29,6 +29,9 @@ SOURCE_FAMILY: dict[str, str] = {
 }
 
 MAX_ZONE_WIDTH_MULTIPLIER = 2.0
+FAMILY_BONUS = 3.0
+HTF_WEEK_MULT = 1.25
+HTF_MONTH_MULT = 1.5
 
 
 @dataclass(frozen=True)
@@ -38,7 +41,7 @@ class MultiSourceZone:
     levels: tuple[Level, ...]
     source_count: int         # distinct families
     score: float
-    classification: str       # "strong" | "confluence" | "structural_pivot" | "level"
+    classification: Literal["strong", "confluence", "structural_pivot", "level"]
 
     @property
     def mid(self) -> float:
@@ -86,17 +89,19 @@ def _score(group: list[Level], families: set[str]) -> float:
       - +HTF bonus multiplier applied to the zone total when any HTF source
         (1w, 1M) contributes: 1.25x for 1w, 1.5x for 1M.
     """
-    base = 3.0 * len(families)
+    base = FAMILY_BONUS * len(families)
     base += sum(TF_WEIGHTS.get(l.tf, 1) * l.strength for l in group)
     tfs = {l.tf for l in group}
     if "1M" in tfs:
-        base *= 1.5
+        base *= HTF_MONTH_MULT
     elif "1w" in tfs:
-        base *= 1.25
+        base *= HTF_WEEK_MULT
     return base
 
 
-def _classify(source_count: int, families: set[str]) -> str:
+def _classify(
+    source_count: int, families: set[str]
+) -> Literal["strong", "confluence", "structural_pivot", "level"]:
     if source_count >= 3:
         return "strong"
     if source_count == 2:
