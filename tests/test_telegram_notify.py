@@ -1,13 +1,18 @@
-from src.types import SwingPair, FibLevel, Zone
 from src.telegram_notify import build_summary
 
 
-def _zone(price, score):
-    pair = SwingPair(tf="1d", high_price=price+10, high_ts=1,
-                     low_price=price-10, low_ts=0, direction="up")
-    lvls = (FibLevel(price=price, tf="1d", ratio=0.618,
-                     kind="retracement", pair=pair),)
-    return Zone(min_price=price, max_price=price, score=score, levels=lvls)
+def _zone(price, score, sources=("FIB_618",), classification="confluence"):
+    return {
+        "min_price": price,
+        "max_price": price,
+        "mid": float(price),
+        "score": score,
+        "source_count": len(sources),
+        "classification": classification,
+        "distance_pct": 0.0,
+        "sources": list(sources),
+        "contributing_levels": [],
+    }
 
 
 def test_summary_includes_current_price_and_top_zones():

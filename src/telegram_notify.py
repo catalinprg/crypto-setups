@@ -13,7 +13,6 @@ import os
 import httpx
 
 from src.config import CONFIG
-from src.types import Zone
 
 API_BASE = "https://api.telegram.org"
 TIMEOUT = 10
@@ -22,8 +21,8 @@ TIMEOUT = 10
 def build_summary(
     *,
     current_price: float,
-    top_support: list[Zone],
-    top_resistance: list[Zone],
+    top_support: list[dict],
+    top_resistance: list[dict],
     notion_url: str,
     max_each_side: int = 2,
 ) -> str:
@@ -31,11 +30,15 @@ def build_summary(
     if top_resistance:
         lines.append("*Resistance:*")
         for z in top_resistance[:max_each_side]:
-            lines.append(f"  · ${z.mid:,.0f} (score {z.score})")
+            lines.append(
+                f"  · ${z['mid']:,.0f} (score {z['score']}, {z['classification']})"
+            )
     if top_support:
         lines.append("*Support:*")
         for z in top_support[:max_each_side]:
-            lines.append(f"  · ${z.mid:,.0f} (score {z.score})")
+            lines.append(
+                f"  · ${z['mid']:,.0f} (score {z['score']}, {z['classification']})"
+            )
     lines.append("")
     lines.append(notion_url)
     return "\n".join(lines)
