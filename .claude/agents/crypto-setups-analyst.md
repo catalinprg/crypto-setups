@@ -852,7 +852,11 @@ Every factual claim in Sinteză & Condiții de piață, Calendar economic, skip-
 2. **No field aliasing.** Never conflate related-but-distinct fields. Specifically:
     - `cvd.trend` is the 24h rolling direction. `cvd.divergence` is the price-vs-CVD divergence flag. They are **different fields**. A bullish trend without a non-null divergence is `cvd.trend = bullish, cvd.divergence = null` — that is NOT a "CVD divergence bullish" in the briefing. Write *"CVD trend bullish"*, never *"CVD divergență bullish"* unless `cvd.divergence == "bullish"`.
     - `market_structure[tf].bias == "range"` is NOT bullish or bearish. Never list a `range` TF among bullish/bearish TFs. Enumerate bias exactly as the payload states.
-    - `open_interest_change_24h_pct == null` is NOT "OI neutral" / "OI flat" / "OI stable". It is **absent** — do not write any OI clause.
+    - `open_interest_change_24h_pct == null` is NOT "OI neutral" / "OI flat" / "OI stable". It is **absent** — do not write any OI change clause.
+    - **OI level vs OI delta are distinct fields.** Never collapse them into a single "OI indisponibil" claim. Check each independently:
+      - If `open_interest_usd` is non-null → the level is available; you MAY cite it (e.g. *"OI $13.7B"*) but the 24h decision-grade signal still comes from `open_interest_change_24h_pct`.
+      - If `open_interest_change_24h_pct` is null → say *"fără OI delta 24h"* or stay silent. Do NOT say *"OI indisponibil"* unless BOTH `open_interest_usd == null` AND `open_interest_change_24h_pct == null`.
+      - When listing absent derivatives fields in Sinteză (*"funding/basis indisponibile"*), enumerate only the fields that are actually null. If OI level is present but delta is null, write *"funding + basis indisponibile; fără OI delta 24h"*, not *"funding/basis/OI indisponibile"*.
     - `liquidations_24h == null` and `liquidations_72h == null` mean **no liquidation data** — never write *"lichidări short-side dominante"*, *"longs flushed"*, or any liquidation attribution.
     - `funding_rate_annualized_pct` at, say, `−7.9%` is NOT "shorts crowded" unless it also meets the `< −10%` threshold (or `pct_rank_90d < 10`). Do not promote a near-threshold funding number into a vote reason.
 
