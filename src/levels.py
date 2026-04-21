@@ -59,6 +59,76 @@ def sort_sources_by_priority(sources: Iterable[str]) -> list[str]:
         return (FAMILY_PRIORITY.get(fam, 99), s)
     return sorted(set(sources), key=key)
 
+
+# Filtering rules for the visible `sources` list in the payload (NOT for
+# internal scoring — score uses all levels). Addresses AVWAP/fib noise:
+# a zone that contains 5 fib ratios from the same TF + 6 AVWAP variants is
+# displaying the same underlying signal 11 times.
+AVWAP_CORE_TAGS = {
+    "AVWAP_SESSION", "AVWAP_SWING_HH", "AVWAP_SWING_LL",
+    "AVWAP_WEEK", "AVWAP_MONTH", "AVWAP_EVENT",
+}
+AVWAP_BAND_TAGS = {
+    "AVWAP_BAND_1SD_UP", "AVWAP_BAND_1SD_DOWN",
+    "AVWAP_BAND_2SD_UP", "AVWAP_BAND_2SD_DOWN",
+}
+FIB_RATIO_RANK = {
+    "FIB_618": 0, "FIB_500": 1, "FIB_786": 2,
+    "FIB_382": 3, "FIB_236": 4,
+    "FIB_1272": 5, "FIB_1618": 6,
+}
+MAX_AVWAP_TAGS_SHOWN = 2
+MAX_FIB_TAGS_PER_TF = 2
+
+
+def filter_sources_for_display(levels: Iterable) -> list[str]:
+    """Collapse noisy source lists for the payload.
+
+    Rules:
+      - Drop AVWAP_BAND_* (bands derive from the core AVWAP, they're the
+        same signal at ±σ offsets).
+      - Keep at most `MAX_AVWAP_TAGS_SHOWN` AVWAP core tags, in priority
+        order (session > swing > week > month > event).
+      - Keep at most `MAX_FIB_TAGS_PER_TF` fib tags per TF, preferring the
+        structurally significant ratios (618 > 500 > 786 > 382 > ...).
+      - All non-AVWAP, non-FIB sources pass through unchanged.
+    Final list is sorted by `sort_sources_by_priority`.
+    """
+    levels = list(levels)
+    sources: set[str] = set()
+
+    # FIB: group (source, tf) pairs, then rank within each TF.
+    fibs_by_tf: dict[str, list[tuple[int, str]]] = {}
+    for lvl in levels:
+        if lvl.source.startswith("FIB_"):
+            rank = FIB_RATIO_RANK.get(lvl.source, 99)
+            fibs_by_tf.setdefault(lvl.tf, []).append((rank, lvl.source))
+    for tf, ranked in fibs_by_tf.items():
+        ranked.sort(key=lambda x: x[0])
+        for _, src in ranked[:MAX_FIB_TAGS_PER_TF]:
+            sources.add(src)
+
+    # AVWAP: keep core tags only, capped at MAX_AVWAP_TAGS_SHOWN.
+    avwap_core_priority = [
+        "AVWAP_SESSION", "AVWAP_SWING_HH", "AVWAP_SWING_LL",
+        "AVWAP_WEEK", "AVWAP_MONTH", "AVWAP_EVENT",
+    ]
+    avwap_present = {lvl.source for lvl in levels if lvl.source in AVWAP_CORE_TAGS}
+    kept_avwap = [t for t in avwap_core_priority if t in avwap_present][:MAX_AVWAP_TAGS_SHOWN]
+    sources.update(kept_avwap)
+
+    # All other sources pass through.
+    for lvl in levels:
+        if lvl.source.startswith("FIB_"):
+            continue
+        if lvl.source in AVWAP_BAND_TAGS:
+            continue
+        if lvl.source in AVWAP_CORE_TAGS:
+            continue
+        sources.add(lvl.source)
+
+    return sort_sources_by_priority(sources)
+
 MAX_ZONE_WIDTH_MULTIPLIER = 2.0
 FAMILY_BONUS = 3.0
 HTF_WEEK_MULT = 1.25

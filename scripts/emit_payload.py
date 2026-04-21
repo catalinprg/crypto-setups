@@ -9,6 +9,10 @@ from datetime import datetime, timezone
 
 from src import derivatives as derivatives_mod
 from src import liquidity as liquidity_mod
+from src import options as options_mod
+from src import sessions as sessions_mod
+from src import cvd as cvd_mod
+from src import recent_action as recent_action_mod
 from src.config import CONFIG
 from src.fetch import fetch_all, taker_delta_per_tf
 from src.venue_aggregator import fetch_all_venues, aggregate_bars
@@ -24,7 +28,7 @@ from src.fvg import detect_fvgs
 from src.order_blocks import detect_order_blocks
 from src.market_structure import analyze_structure
 from src.levels import (
-    cluster_levels, split_by_price, sort_sources_by_priority,
+    cluster_levels, split_by_price, filter_sources_for_display,
     fibs_to_levels, pools_to_levels, profile_to_levels, naked_pocs_to_levels,
     avwap_to_levels, fvgs_to_levels, obs_to_levels, structure_to_levels,
 )
@@ -56,7 +60,11 @@ async def _aggregated_per_tf(symbol: str, binance_ohlc: dict) -> tuple[dict, lis
 
 
 async def build() -> dict:
-    ohlc, deriv = await asyncio.gather(fetch_all(), derivatives_mod.fetch_all())
+    ohlc, deriv, options_block = await asyncio.gather(
+        fetch_all(),
+        derivatives_mod.fetch_all(),
+        options_mod.fetch_all(CONFIG.asset),
+    )
 
     # --- Swings + fibs (Binance-only as before; swings need historic stability)
     all_pairs = []
@@ -73,6 +81,18 @@ async def build() -> dict:
     current_price = daily_bars[-1].close
     daily_atr = _latest(atr(daily_bars, 14))
     radius = daily_atr * ATR_CLUSTER_MULTIPLIER
+
+    # Per-TF ATR (14). Used by the agent for TF-appropriate stop sizing:
+    # 1h for intraday triggers, 4h for swing entries, 1d as the macro buffer.
+    # None when a TF lacks enough bars for ATR(14).
+    def _safe_atr(tf: str) -> float | None:
+        bars = ohlc.get(tf) or []
+        try:
+            v = _latest(atr(bars, 14))
+            return round(v, 2) if v is not None else None
+        except RuntimeError:
+            return None
+    atr_by_tf = {tf: _safe_atr(tf) for tf in ("1h", "4h", "1d")}
 
     fibs = compute_all(all_pairs)
     fibs = [
@@ -171,7 +191,7 @@ async def build() -> dict:
             "source_count": z.source_count,
             "classification": z.classification,
             "distance_pct": round((z.mid - current_price) / current_price * 100, 2),
-            "sources": sort_sources_by_priority(l.source for l in z.levels),
+            "sources": filter_sources_for_display(z.levels),
             "contributing_levels": sorted(
                 [{"source": l.source, "tf": l.tf, "price": round(l.price, 2), "meta": l.meta}
                  for l in z.levels],
@@ -184,6 +204,30 @@ async def build() -> dict:
             deriv["liquidation_clusters_72h"], ohlc["4h"]
         )
 
+    # Session extremes (intraday liquidity pools) + time-since-event freshness.
+    h1_bars = ohlc.get("1h") or []
+    sessions_block = sessions_mod.session_extremes(h1_bars)
+    sessions_block["current_session"] = sessions_mod.current_session()
+
+    time_since_block = sessions_mod.time_since_events(
+        market_structure=ms_by_tf,
+        liquidity_pools=liquidity_pools,
+    )
+
+    # Rolling CVD (24h on 1h bars) + price divergence.
+    cvd_block = cvd_mod.compute_cvd_snapshot(h1_bars)
+
+    # Chart-visual context: recent 1h bars, current leg vs swing extremes,
+    # recent tested levels (double/triple bottoms), BOS wick vs body quality.
+    recent_bars_block = recent_action_mod.recent_bars(h1_bars, n=12)
+    current_leg_block = recent_action_mod.current_leg(h1_bars, current_price)
+    swing_clusters_block = recent_action_mod.recent_swing_clusters(h1_bars)
+    ms_serializable = {
+        tf: {"last_bos": ms.last_bos, "last_choch": ms.last_choch, "bias": ms.bias}
+        for tf, ms in ms_by_tf.items()
+    }
+    bos_quality_block = recent_action_mod.classify_bos_quality(ms_serializable, ohlc)
+
     return {
         "asset": CONFIG.asset,
         "display_name": CONFIG.display_name,
@@ -191,11 +235,20 @@ async def build() -> dict:
         "current_price": round(current_price, 2),
         "change_24h_pct": round(change_24h_pct, 2),
         "daily_atr": round(daily_atr, 2),
+        "atr_by_tf": atr_by_tf,
         "contributing_tfs": contributing,
         "skipped_tfs": skipped,
         "resistance": [z_to_dict(z) for z in resistance[:MAX_ZONES_PER_SIDE]],
         "support":    [z_to_dict(z) for z in support[:MAX_ZONES_PER_SIDE]],
         "derivatives": deriv,
+        "options": options_block,
+        "cvd": cvd_block,
+        "sessions": sessions_block,
+        "time_since_events": time_since_block,
+        "recent_bars_1h": recent_bars_block,
+        "current_leg": current_leg_block,
+        "swing_clusters": swing_clusters_block,
+        "bos_quality": bos_quality_block,
         "spot_taker_delta_by_tf": taker_delta_per_tf(ohlc),
         "liquidity": liquidity_pools,
         "market_structure": {
@@ -232,7 +285,10 @@ def main() -> int:
     print(f"current: {payload['current_price']} "
           f"resistance: {len(payload['resistance'])} "
           f"support: {len(payload['support'])} "
-          f"derivatives: {payload['derivatives']['status']}")
+          f"derivatives: {payload['derivatives']['status']} "
+          f"options: {payload['options']['status']} "
+          f"cvd: {payload['cvd'].get('status', 'n/a')} "
+          f"session: {payload['sessions'].get('current_session')}")
     return 0
 
 
