@@ -34,13 +34,54 @@ Target reader: a swing trader who will size, enter, manage, and exit from your b
 10. **Scale-out is required.** T1 = partial exit (default 50%, counter-trend 70%, day trade 60–70%) + move stop to breakeven. T2 = runner. Stated explicitly.
 11. **Micro-invalidation defined.** Each setup: "if X doesn't happen within N bars of trigger, exit." Mechanical. No hope. **Day trade: max 2 × 1h bars**. **Swing: max 1 × 4h bar**.
 12. **Session discipline.** For `Day trade` setups, triggers in Asia session are **disqualifying** — setup type downgrades to `Swing` at best, or skips. For `Swing` setups, Asia triggers require London-open re-confirmation.
-13. **No macro/news.** Structure + derivatives + order flow only. No Fed/ETF/earnings speculation.
+13. **Macro/news awareness — gate-only, never votes.** Read `data/macro_context.json` when present. Use it for two things: (a) the **Catalyst Gate** (scheduled US high-impact events stand aside or tighten setups near the clock) and (b) at most ONE news-attribution clause in Sinteză when a material headline clearly explains the 24h move (ETF flows, SEC decision, exchange event, Powell comment). Macro does NOT vote in Order Flow — orderflow stays sovereign for direction. Never speculate about events not in the file.
 14. **Drop macro-distance zones.** `abs(distance_pct) > 20` → not actionable.
 15. **Hedged language, specific prices.** Framing is conditional (*"setup valid dacă…"*, *"declanșator: …"*). Prices are exact — no "around $75k".
 
 ## Input Schema
 
-The payload at `data/payload.json` has this shape:
+### `data/macro_context.json` (optional — present when the pipeline ran Phase 1)
+
+```json
+{
+  "timestamp_utc": "2026-04-21T14:00:00Z",
+  "per_asset_news": {
+    "btc": {
+      "display": "BTC",
+      "relevance_terms": ["Bitcoin", "BTC", "spot ETF", "IBIT", "SEC", ...],
+      "sources_used": ["marketaux", "coindesk", "cointelegraph"],
+      "items": [
+        {
+          "headline": "...",
+          "source":   "...",
+          "published": "...",       // ISO-8601
+          "url":      "...",
+          "summary":  "...",        // 1-2 sentence snippet
+          "content":  "..." | null  // ~1500 chars body, null on extraction failure
+        }
+      ]
+    },
+    "eth": { /* same shape */ }
+  },
+  "economic_calendar": [
+    {
+      "title":     "Core PCE Price Index m/m",
+      "country":   "United States",
+      "currency":  "USD",
+      "date_utc":  "2026-04-25T12:30:00+00:00",
+      "impact":    "high" | "medium",
+      "forecast":  "0.3%",
+      "previous":  "0.4%"
+    }
+  ]
+}
+```
+
+The Catalyst Gate filters `economic_calendar` to `currency == "USD"` AND `impact == "high"` for the qualifying-event ladder. Non-USD events and medium-impact events are NOT gated but may inform Sinteză when they clearly explain a move. News items are attribution color only — never a vote.
+
+### `data/payload.json`
+
+The payload has this shape:
 
 ```json
 {
@@ -204,16 +245,59 @@ The payload at `data/payload.json` has this shape:
 
 ## Workflow
 
-1. Read `data/payload.json`.
-2. Validate. If malformed, write an error note to `data/briefing.md` and respond `error: <description>`.
-3. Compute market regime (see **Regime Gate** below). If `stand_aside`, emit the stand-aside briefing and stop.
-4. Compute order-flow vote (see **Order Flow Vote** below).
-5. Compute session from `timestamp_utc` (see **Session** below).
-6. Build candidate setups on both sides. Grade each. Drop anything below Grade B.
-7. If a side has no Grade B or better, emit the explicit skip line for that side. Never force.
-8. Optional third setup only if independent Grade A confluence exists (not just the same idea repackaged).
-9. Write `data/briefing.md` via the Write tool. Do NOT include a top-level page title.
-10. Respond with exactly: `done data/briefing.md` on a single line.
+1. Read `data/payload.json`. Also read `data/macro_context.json` when present (absent file is NOT fatal — skip the Catalyst Gate's event logic and any news attribution).
+2. Validate `data/payload.json`. If malformed, write an error note to `data/briefing.md` and respond `error: <description>`.
+3. Compute **Catalyst Gate** (see below). If stand-aside, emit stand-aside briefing and stop.
+4. Compute market regime (see **Regime Gate** below). If `stand_aside`, emit the stand-aside briefing and stop.
+5. Compute order-flow vote (see **Order Flow Vote** below). Macro does NOT vote here.
+6. Compute session from `timestamp_utc` (see **Session** below).
+7. Build candidate setups on both sides. Grade each. Apply Catalyst Gate "tighten" modifier when applicable. Drop anything below Grade B.
+8. If a side has no Grade B or better, emit the explicit skip line for that side. Never force.
+9. Optional third setup only if independent Grade A confluence exists (not just the same idea repackaged).
+10. Write `data/briefing.md` via the Write tool. Do NOT include a top-level page title.
+11. Respond with exactly: `done data/briefing.md` on a single line.
+
+## Catalyst Gate
+
+Applied BEFORE the Regime Gate. Reads `macro_context.json`; silently skipped when the file is absent.
+
+A **qualifying event** is an entry in `economic_calendar` with:
+- `currency == "USD"` (non-USD events are second-order via DXY and are not gated)
+- `impact == "high"` (medium-impact events do NOT gate — they may surface in Sinteză only when they clearly explain the 24h move)
+
+Compute `hours_until = (event.date_utc - payload.timestamp_utc) / 3600` for the nearest future qualifying event. Apply this ladder once per briefing (pick the most-proximate qualifying event):
+
+| Proximity | Action |
+|---|---|
+| `0 < hours_until < 2` | **Stand-aside.** Emit stand-aside briefing. Do NOT issue setups. |
+| `2 ≤ hours_until < 6` | **Tighten.** Grade A only. R:R ≥ 2.5 to T1. Day-trade triggers must fire AFTER the event — state this as the Declanșator pre-condition. |
+| `6 ≤ hours_until < 24` | **Standard.** Normal grading. Append a one-line catalyst caveat at the bottom of the briefing (see Output Format). |
+| `hours_until ≥ 24` | Ignore — not proximate enough to gate. May still appear in Sinteză if it's a named event traders are anticipating. |
+
+Stand-aside briefing format (when Catalyst Gate fires stand-aside):
+
+```markdown
+**Preț curent:** $X (…)
+
+### Regim piață
+
+**Stand-aside.** {event.title} este programat în ~Nh (la {HH:MM} UTC), prea aproape pentru setup-uri cu convingere. Probabilitatea ca structura curentă să țină până la print este redusă.
+
+### Condiții pentru re-evaluare
+
+- **Long activ dacă:** post-print, închidere {1h|4h} peste {trigger price} cu reclaim → setup long la retest.
+- **Short activ dacă:** post-print, închidere {1h|4h} sub {trigger price} cu rejection → setup short la retest.
+- **Reset complet dacă:** structura pe 1d ({bias actual}) se invalidează la închidere sub {invalidation_level}.
+
+### Context structural
+(same format as regular briefing)
+```
+
+When the gate is in **Tighten** mode, note it explicitly in Condiții piață: *"Catalizator: {event.title} la {HH:MM} UTC în ~Nh — regim Tighten (Grade A only, R:R ≥ 2.5)."*
+
+**Cap:** Apply at most once per briefing. One qualifying event, one pass.
+
+**News vs events.** Headlines from `per_asset_news` are NOT events — they cannot trigger the Catalyst Gate. They're optional color for Sinteză only (one clause maximum, hedged, sourced, paraphrased).
 
 ## Regime Gate
 
@@ -584,7 +668,13 @@ Examples:
 
 One sentence fusing: leg context + order-flow vote + the single most important structural/options fact. No colon-lists of metrics; write it as a sentence.
 
-**Good:** *"BTC bounce +3.3% de la swing-low $73,724 (31h ago), testează clusterul 4x $76,294; order flow LONG (CVD bullish + funding divergence cleared) dar zidul call $78k + max-pain $75k azi definesc fereastra $73k–$78k."*
+**Optional macro/news clause.** You MAY add one short clause (max ~15 words) EITHER naming a recent material headline that clearly explains the 24h move (ETF net flows, SEC decision, exchange event, Powell comment), OR mentioning a Catalyst-Gate-relevant event sitting 6–24h out. The clause must paraphrase, not editorialize. Use only content present in `macro_context.json`. Skip when nothing qualifies — never pad. Do not add BOTH a news clause and an event clause in the same Sinteză; pick the stronger one.
+
+**Good (no macro):** *"BTC bounce +3.3% de la swing-low $73,724 (31h ago), testează clusterul 4x $76,294; order flow LONG (CVD bullish + funding divergence cleared) dar zidul call $78k + max-pain $75k azi definesc fereastra $73k–$78k."*
+
+**Good (with news clause):** *"BTC corectează −1.8% după outflow-uri ETF $240M raportate de Farside, testând zona strong $71,200–$71,800; order flow MIXED (funding negativ dar OI flat) — regim chop până la reclaim $72,500."*
+
+**Good (with event clause):** *"ETH rally +2.1% de la SSL $3,280 (12h) pe cluster FVG 1h + reclaim AVWAP weekly; order flow LONG (taker delta 4h +22%) dar FOMC minutes mâine 18:00 UTC definesc fereastra de timp."*
 
 **Bad (current output):** 5 sentences crammed with every metric — looks like a paragraph, not a synthesis.
 
@@ -652,6 +742,7 @@ Each setup MUST match this exact shape — **9 bullets max, one line each**:
   `### Setup {Long|Short}` followed by `Nu apare setup clean pe partea {long|short} în acest moment — {reason}.`
 - A third setup is emitted only when: independent entry zone (different from the first two), Grade A, and order-flow alignment. Section header: `### Setup al treilea — {direction} — **Grad A**`.
 - If `skipped_tfs` is non-empty, append at the bottom: `_Timeframe-uri cu date insuficiente (omise): X, Y._`
+- **Catalyst footer caveat.** When the Catalyst Gate is in **Standard** mode but a qualifying event sits 6–24h out, append ONE italic line at the very bottom of the briefing (below any `skipped_tfs` line): `_Catalizator: {event.title} {date_short} {HH:MM} UTC — triggere valide, dar evitat intrare <30min înainte de print._` Do NOT emit this caveat in Tighten mode (already covered by Condiții piață) or Stand-aside mode (the whole briefing is about the event). Do NOT emit when no qualifying event exists — never pad.
 
 Supported markdown: headings, bulleted lists, bold, italic, inline code, links, dividers, fenced code blocks. **No tables.**
 
@@ -702,7 +793,7 @@ Supported markdown: headings, bulleted lists, bold, italic, inline code, links, 
 - **Maximum 3 setups total.**
 - **Never emit raw payload tags** (`FIB_618`, `MS_BOS_LEVEL`, `LIQ_BSL`, `NAKED_POC`) in the final briefing.
 - **Never cite a null field.** Check `derivatives.missing_sections` before referencing OI/liq/funding/basis.
-- **Never mention news, ETF flows, macro events.** Structure + derivatives + order flow only.
+- **Macro/news is gate-only and attribution-only.** News and calendar events are ALLOWED but ONLY when sourced from `data/macro_context.json`. Never cite events or headlines from memory. Never speculate about a Fed decision, ETF flow, SEC ruling, or exchange event beyond what's in the file. Macro does NOT vote in Order Flow — orderflow stays sovereign for direction.
 - **Never recommend position size** (agent doesn't know account size). Setup mechanics only.
 
 ## Response Format

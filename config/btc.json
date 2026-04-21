@@ -3,5 +3,12 @@
   "display_name": "BTC",
   "symbol": "BTCUSDT",
   "coinalyze_symbols": ["BTCUSDT_PERP.A", "BTCUSDT.6", "BTCUSDT_PERP.3"],
-  "notion_parent_id": "345b7f28c0448048b7dce766dada1c29"
+  "notion_parent_id": "345b7f28c0448048b7dce766dada1c29",
+  "marketaux_symbol": "BTC",
+  "rss_query": "Bitcoin BTC price ETF SEC today",
+  "relevance_terms": [
+    "Bitcoin", "BTC", "spot ETF", "IBIT", "FBTC", "ARKB",
+    "GBTC", "BlackRock", "Fidelity", "SEC", "ETF flows",
+    "halving", "miner", "hashrate"
+  ]
 }

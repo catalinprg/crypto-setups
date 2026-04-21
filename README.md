@@ -34,6 +34,16 @@ Set on the cloud environment (not committed to the repo). Each Routines trigger 
 - `COINALYZE_API_KEY` — for open interest and liquidation data ([sign up](https://coinalyze.net/)). If unset, the derivatives section degrades to `status=unavailable` and the pipeline continues with pure fib analysis.
 - `NOTION_TOKEN` — Notion Internal Integration Token ([create one](https://www.notion.so/profile/integrations)). The parent page for the active asset must be shared with the integration.
 
+## Optional — Macro context (news + economic calendar)
+
+Phase 1 of the pipeline fetches shared macro context (per-asset news + US economic calendar) before the per-asset loop. The analyst consumes this via `data/macro_context.json` for its Catalyst Gate (stand-aside <2h before high-impact USD events, tighten 2–6h, standard 6–24h with footer caveat) and optional one-clause news attribution in Sinteză. All macro env vars are optional — each source degrades silently.
+
+- `MARKETAUX_API_KEY` — primary crypto news (BTC/ETH symbol queries). Falls back to CoinDesk + Cointelegraph RSS when missing.
+- `FIRECRAWL_API_KEY` — article-body extraction fallback when trafilatura fails (JS-rendered pages, paywall interstitials).
+- `FIRECRAWL_BUDGET_PER_RUN` — cap on Firecrawl calls per run (default `10`). Prevents burning free-tier quota on a bad-extraction day.
+
+The economic calendar is served by this repo's own `data-mirror/ff_calendar_thisweek.json`, refreshed every 4 hours by `.github/workflows/update-calendar.yml` pulling from `nfs.faireconomy.media`. The repo must be **public** because Claude Code cloud sessions read from `raw.githubusercontent.com` unauthenticated.
+
 ## Optional — Telegram notifications
 
 Set both per trigger (each asset should have its own chat):
@@ -49,16 +59,24 @@ In the Claude Code cloud environment configuration, set the bootstrap / setup-co
 
 ```bash
 #!/bin/bash
-uv pip install --system httpx requests
+uv pip install --system httpx requests PyYAML feedparser trafilatura
 ```
 
-This runs automatically every time a session spins up. Both packages are pure-Python — no compilation needed.
+This runs automatically every time a session spins up. All packages are pure-Python — no compilation needed.
 
 Outbound network allowlist on the cloud environment must include:
 - `data-api.binance.vision` (OHLC + spot book ticker for basis)
 - `api.bybit.com` (perp ticker — funding rate + mark price)
 - `api.hyperliquid.xyz` (cross-venue funding)
 - `api.coinalyze.net` (OI, liquidations)
+- `www.deribit.com` (options positioning)
+- `api.marketaux.com` (crypto news API, optional)
+- `www.coindesk.com` (crypto-native news RSS)
+- `cointelegraph.com` (crypto-native news RSS)
+- `news.google.com` (news RSS fallback)
+- `raw.githubusercontent.com` (economic calendar mirror)
+- `api.firecrawl.dev` (article-content extraction fallback, optional)
+- News publisher domains for article-content extraction (Reuters, CoinDesk, Cointelegraph, The Block, Decrypt, Bloomberg, etc.) — best-effort; extraction failures fall back to the RSS summary
 - `api.notion.com` (publishing)
 - `api.telegram.org` (notifications, optional)
 

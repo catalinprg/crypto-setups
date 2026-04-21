@@ -1,121 +1,123 @@
 ---
 name: crypto-setups
-description: Full crypto trade-setup pipeline. Fetches OHLC from Binance across 5 timeframes + derivatives (OI, funding, liquidations) from Coinalyze/Bybit, computes multi-source confluence zones, dispatches the crypto-setups-analyst agent to produce a Romanian trade-setup briefing (2+ setups: long + short, optional 3rd), publishes to Notion under the asset's Swings parent, notifies Telegram. Takes an `asset` argument — `btc`, `eth`, or `all` (runs both sequentially in one session to conserve Routines quota). Use when the user wants actionable BTC or ETH trade setups with entries, stops, and R:R targets.
+description: Full crypto trade-setup pipeline. Phase 1 fetches macro context (per-asset news + US economic calendar) once. Phase 2 per-asset: fetches OHLC from Binance across 5 timeframes + derivatives (OI, funding, liquidations) from Coinalyze/Bybit + options (Deribit), computes multi-source confluence zones, dispatches the crypto-setups-analyst agent to produce a Romanian trade-setup briefing with Catalyst-Gate awareness (2+ setups: long + short, optional 3rd), publishes to Notion under the asset's Swings parent, notifies Telegram. Takes an `asset` argument — `btc`, `eth`, or `all` (runs both sequentially in one session to conserve Routines quota). Use when the user wants actionable BTC or ETH trade setups with entries, stops, and R:R targets.
 ---
 
-You are executing the crypto-setups analysis pipeline.
+You are executing the crypto-setups analysis pipeline. The pipeline is **two-phase**: one macro fetch shared across the run, then a per-asset loop.
 
 ## Arguments
 
 - `asset` — one of `btc`, `eth`, or `all`. Required.
-  - `btc` / `eth` — run the pipeline for that asset only.
-  - `all` — run the full pipeline for BTC, then for ETH, sequentially, in a single session. Used by the consolidated Routines trigger to produce both briefings in one scheduled run (halves the Routines quota cost).
+  - `btc` / `eth` — run Phase 1 then Phase 2 for that asset only.
+  - `all` — run Phase 1 once, then Phase 2 for BTC, then for ETH. Independent per-asset error handling: a failure in BTC must NOT skip ETH.
 
 If the argument is missing or not one of `btc` / `eth` / `all`, stop and ask the user which asset to run.
 
-## Dispatch
-
-- **`asset == btc` or `asset == eth`:** execute Steps 1–6 once for that asset.
-- **`asset == all`:** execute Steps 1–6 first for `btc`, then for `eth`. Each asset runs as an **independent unit with its own error handling** — a failure in BTC must NOT skip ETH. Collect per-asset outcomes and report both at the end (see "Step 6 — Confirm" below for the `all` reporting format).
-
-## Step 1 — Refresh repo and emit payload
-
-Run these from the repo root in order. Export `ASSET` so every downstream call sees it. In `all` mode, re-export `ASSET` before each asset's run:
+## Step 1 — Refresh repo
 
 ```bash
-export ASSET=<asset>         # btc or eth (NOT "all" — always a specific asset here)
 git checkout main
 git pull --ff-only
-python3 -m scripts.emit_payload data/payload.json
 ```
 
-(In `all` mode, `git checkout main` / `git pull` only needs to run once — before the first asset. Just re-export `ASSET` between assets.)
+Ensures HEAD is on `main` and picks up code changes since session start.
 
-`git checkout main` ensures HEAD is on the canonical branch — resumed cloud environments may still be on a prior `claude/...` branch from an earlier run, which would make `git pull --ff-only` fail. `git pull --ff-only` then picks up any code changes since the session started.
+## Step 2 — Phase 1: macro fetch (once per run)
 
-`emit_payload.py` reads `ASSET` and loads `config/$ASSET.json`, fetches Binance OHLC across 5 timeframes, pulls derivatives from Coinalyze + Bybit (OI, funding rate, 72h liquidation history with price-at-time enrichment), computes Fibonacci confluence zones with ATR-adaptive clustering, and writes `data/payload.json`.
-
-Required env vars (set on the cloud environment, not committed):
-- `ASSET` — `btc` or `eth`. Selects which config file is loaded.
-- `COINALYZE_API_KEY` — for OI and liquidation data. If unset, the derivatives section degrades to `status=unavailable` and the pipeline continues with pure fib analysis.
-
-Wait for the command to complete. If it exits with a non-zero code or logs a fatal error:
-- In single-asset mode: stop and report the failure.
-- In `all` mode: record the failure for this asset (see Step 6) and **continue with the next asset** (re-start Step 1 for the next asset). Do not abort the whole session on one asset's failure.
-
-The last line of stdout confirms what was emitted, e.g.:
-```
-payload written: data/payload.json
-current: 74845.05 resistance: 8 support: 8 derivatives: ok
+```bash
+python3 -m scripts.emit_macro
 ```
 
-## Step 2 — Capture timestamp
+Writes `data/macro_context.json` with:
+- Per-asset news (up to 5 items per asset, last 48h, via MARKETAUX for primary + CoinDesk RSS + Cointelegraph RSS, filtered per-asset by `relevance_terms` in the config; Google News RSS fallback when nothing else matched).
+- Economic calendar (next 48h events, read from `data-mirror/ff_calendar_thisweek.json` refreshed every 4h by this repo's GHA workflow). The analyst's Catalyst Gate filters to USD high-impact.
 
-Run:
+Required env vars (all optional — each source degrades silently):
+- `MARKETAUX_API_KEY` — primary news.
+- `FIRECRAWL_API_KEY` — article-body extraction fallback.
+- `FIRECRAWL_BUDGET_PER_RUN` — Firecrawl call cap per run (default `10`).
+
+If this step fails entirely, **continue anyway** — the analyst handles an absent `macro_context.json` by skipping the Catalyst Gate's event logic and any news attribution. Do not abort the pipeline on a macro-fetch failure.
+
+## Step 3 — Capture timestamp
 
 ```bash
 echo $(date +%Y%m%d_%H%M%S)
 ```
 
-Use that value as TIMESTAMP (e.g. `20260417_064530`). This will be the Notion page title. In `all` mode, capture a fresh TIMESTAMP for each asset.
+Store as TIMESTAMP. In `all` mode, capture a fresh TIMESTAMP for each asset (wall-clock moves during the run).
 
-## Step 3 — Dispatch crypto-setups-analyst agent (produces 2+ trade setups)
+## Step 4 — Phase 2: per-asset loop
+
+For each asset in the dispatch plan (one for `btc` / `eth`, two for `all`), execute 4a → 4d sequentially. In `all` mode, a failure in one asset records an outcome and moves on — does NOT skip the next asset.
+
+### 4a. Emit payload
+
+Export `ASSET` so every downstream call sees it. In `all` mode, re-export before each asset's run.
+
+```bash
+export ASSET=<asset>         # btc or eth
+python3 -m scripts.emit_payload data/payload.json
+```
+
+`emit_payload.py` reads `ASSET`, loads `config/$ASSET.json`, fetches Binance OHLC across 5 timeframes, pulls derivatives from Coinalyze + Bybit + Hyperliquid, pulls Deribit options, computes Fibonacci confluence zones + sessions + recent_action sidecars, writes `data/payload.json`.
+
+Required env:
+- `ASSET` — `btc` or `eth`.
+- `COINALYZE_API_KEY` — OI + liquidations. If unset, derivatives degrade to `status=unavailable` and the pipeline continues.
+
+If this exits non-zero, record the failure for this asset and continue.
+
+### 4b. Dispatch crypto-setups-analyst agent
 
 Use the Agent tool to spawn the `crypto-setups-analyst` agent with this minimal prompt:
 
 ```
 Read and analyze: data/payload.json
+Also read (if present): data/macro_context.json
 
 Write your complete briefing as Markdown to data/briefing.md using the Write tool. Do not include a top-level page title — the publisher sets it. After the file is saved, respond with exactly: done data/briefing.md
 ```
 
-That is the complete prompt. Do not add more context — the agent has its full instructions (role, language rules, analysis framework, output format) embedded, and reads the asset identity from the payload's `asset` / `display_name` fields.
+That is the complete prompt. Do not add more context — the agent has its full instructions (role, Catalyst Gate, Regime Gate, Order Flow Vote, language rules, analysis framework, output format) embedded, and reads the asset identity from the payload's `asset` / `display_name` fields.
 
-In `all` mode, the agent overwrites `data/briefing.md` each time — this is expected. Step 4 must run immediately after the agent returns and before the next asset overwrites the file.
+In `all` mode, the agent overwrites `data/briefing.md` each time — this is expected. Step 4c must run immediately after the agent returns and before the next asset overwrites the file.
 
-## Step 4 — Publish to Notion
+If the agent returns `error: ...`, record the failure and move on.
 
-Once the agent returns `done data/briefing.md`, run:
+### 4c. Publish to Notion
 
 ```bash
 python3 publish_notion.py data/briefing.md TIMESTAMP
 ```
 
-Substitute the actual TIMESTAMP from Step 2. `publish_notion.py` reads `ASSET` and routes the page under the correct parent (`BTC Swings` or `ETH Swings`). The script prints the new Notion page URL on its last stdout line.
+Substitute the actual TIMESTAMP. `publish_notion.py` reads `ASSET` and routes the page under the correct parent. The script prints the Notion URL on its last stdout line.
 
-Required env var: `NOTION_TOKEN` (Notion Internal Integration Token). The parent page for the active asset must be shared with the integration.
+Required env: `NOTION_TOKEN`.
 
-If the script exits with a non-zero code, capture stderr. In single-asset mode report and stop. In `all` mode record the failure for this asset and continue with the next asset.
+On non-zero exit, capture stderr and record the failure.
 
-## Step 5 — Notify Telegram (non-fatal)
-
-Fire the notification. `notify_telegram.py` reads `ASSET` and picks the right chat ID automatically — no shell-env juggling required, which would not survive across separate Bash tool calls in the cloud runtime anyway:
+### 4d. Notify Telegram (non-fatal)
 
 ```bash
 python3 notify_telegram.py "$(echo $ASSET | tr a-z A-Z) Swings briefing published $(date +%Y-%m-%d\ %H:%M)
 [View on Notion](<notion_url>)"
 ```
 
-Substitute `<notion_url>` with the URL printed by `publish_notion.py`. Make sure `ASSET` is still exported in this Bash call; if not, prefix inline: `ASSET=<asset> python3 notify_telegram.py "..."`.
+Substitute `<notion_url>`. Required env: `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID_BTC` / `TELEGRAM_CHAT_ID_ETH` (legacy fallback: `TELEGRAM_CHAT_ID`).
 
-Required env vars:
-- `TELEGRAM_BOT_TOKEN` — shared across assets (one bot).
-- `TELEGRAM_CHAT_ID_BTC` and/or `TELEGRAM_CHAT_ID_ETH` — per-asset chat IDs. The script resolves the right one from `ASSET`.
-- Legacy fallback: `TELEGRAM_CHAT_ID` — used only if the per-asset var is missing. Good for one-off single-asset runs.
+Idempotent: missing env → silent no-op; API failure → non-fatal.
 
-The script is idempotent: if the resolved chat ID or bot token is unset, it exits 0 silently with a diagnostic line telling you which env vars it looked at. If the API call fails, it exits non-zero — treat that as non-fatal. Do not fail the whole pipeline on a notification error.
+## Step 5 — Confirm
 
-## Step 6 — Confirm
-
-**Single-asset mode** — report one outcome to the user:
+**Single-asset mode** — report one outcome:
 - **On success:** `Analysis uploaded to Notion: <notion_url>`
+- **On macro failure (non-fatal, continued):** include a leading line `Macro fetch failed (continued without catalysts): <stderr>`, then the success / failure line.
 - **On agent failure:** `$ASSET Swings failed at analysis step: <error from agent>`
 - **On publish failure:** `$ASSET Swings failed at publish step: <stderr>`
-- If Step 5 failed (Telegram API error), append a second line: `Telegram notification failed: <stderr>`.
+- If Telegram failed non-fatally, append: `Telegram notification failed: <stderr>`.
 
-Do not include multiple outcomes. Do not wrap the URL in extra commentary.
-
-**`all` mode** — after both assets have run (or attempted to run), report one consolidated message with one line per asset:
+**`all` mode** — after both assets run, report one consolidated message:
 
 ```
 Crypto Swings (all):
@@ -123,6 +125,8 @@ Crypto Swings (all):
 - ETH: <notion_url>   ← or: ETH: failed at <step> — <error summary>
 ```
 
-If any asset's Telegram failed non-fatally, append a trailing line: `Telegram notification failed for: BTC` (or `ETH`, or `BTC, ETH`).
+If macro failed non-fatally, prepend: `Macro fetch failed (continued without catalysts).`
+
+If any asset's Telegram failed non-fatally, append: `Telegram notification failed for: BTC` (or `ETH`, or `BTC, ETH`).
 
 Do not return early just because one asset failed — always report the final state of both.
