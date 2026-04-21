@@ -186,6 +186,20 @@ def _empty_funding() -> dict:
     return {"rate_8h_pct": None, "annualized_pct": None}
 
 
+def compute_pct_rank(value: float | None, history: list[float]) -> float | None:
+    """Percentile rank of `value` within `history` (0-100). Higher = current
+    reading is more extreme on the upside vs the last 90d sample; lower =
+    more extreme on the downside. None when history is insufficient.
+
+    Why this matters: "funding ann 15%" means nothing without context.
+    "funding at 94th pct over 90d" tells the analyst crowded long →
+    squeeze fuel. The raw number cannot. One field, one purpose."""
+    if value is None or not history or len(history) < 20:
+        return None
+    below_or_equal = sum(1 for h in history if h <= value)
+    return round(below_or_equal / len(history) * 100, 1)
+
+
 def _compute_basis(spot_mid: float | None, perp_mark: float | None) -> dict:
     """Perp mark vs spot mid. `pct` is signed: positive = perp premium over
     spot, negative = perp discount. None when either input is missing."""
@@ -207,6 +221,8 @@ def build_derivatives_payload(
     funding_hyperliquid: dict | None = None,
     spot_mid: float | None = None,
     perp_mark: float | None = None,
+    bybit_funding_history: list[float] | None = None,
+    hl_funding_history: list[float] | None = None,
 ) -> dict:
     """Assemble the derivatives payload. Degrades per-section on partial
     upstream failure: fields from a missing source are set to None instead
@@ -262,6 +278,18 @@ def build_derivatives_payload(
     else:
         funding_divergence_8h_pct = None
 
+    # Attach 90d percentile rank for each venue's current annualized funding.
+    # Turns raw "15% ann" into "94th pct over 90d → crowded long, squeeze
+    # fuel". No other history is stored — just the rank.
+    bybit_with_rank = dict(funding)
+    bybit_with_rank["pct_rank_90d"] = compute_pct_rank(
+        funding.get("annualized_pct"), bybit_funding_history or [],
+    )
+    hl_with_rank = dict(funding_hyperliquid)
+    hl_with_rank["pct_rank_90d"] = compute_pct_rank(
+        funding_hyperliquid.get("annualized_pct"), hl_funding_history or [],
+    )
+
     return {
         "status": "ok",
         "partial": bool(missing),
@@ -271,8 +299,8 @@ def build_derivatives_payload(
         "funding_rate_8h_pct": funding["rate_8h_pct"],
         "funding_rate_annualized_pct": funding["annualized_pct"],
         "funding_by_venue": {
-            "bybit": funding,
-            "hyperliquid": funding_hyperliquid,
+            "bybit":       bybit_with_rank,
+            "hyperliquid": hl_with_rank,
         },
         "funding_divergence_8h_pct": funding_divergence_8h_pct,
         "spot_mid": spot_mid,
@@ -340,6 +368,73 @@ async def fetch_binance_spot_mid(client: httpx.AsyncClient) -> float | None:
     return None
 
 
+async def fetch_bybit_funding_history(
+    client: httpx.AsyncClient, *, limit: int = 200,
+) -> list[float]:
+    """Bybit USDT-M funding history — 8h intervals, most recent first.
+    Returns a list of annualized-pct rates (same units the current reading
+    uses), up to `limit` entries. `limit=200` covers ~66d of 8h funding;
+    Bybit caps per-call at 200 so this is one round trip. Empty on failure."""
+    for attempt in range(2):
+        try:
+            r = await client.get(
+                "https://api.bybit.com/v5/market/funding/history",
+                params={
+                    "category": "linear",
+                    "symbol": CONFIG.symbol,
+                    "limit": limit,
+                },
+                timeout=TIMEOUT,
+            )
+            r.raise_for_status()
+            data = r.json()
+            rows = data.get("result", {}).get("list") or []
+            # Each row: {fundingRate (fraction), fundingRateTimestamp, symbol}
+            return [float(row["fundingRate"]) * 3 * 365 * 100 for row in rows]
+        except (httpx.HTTPError, ValueError, KeyError, TypeError):
+            if attempt == 1:
+                return []
+            await asyncio.sleep(2)
+    return []
+
+
+async def fetch_hyperliquid_funding_history(
+    client: httpx.AsyncClient, *, days: int = 90,
+) -> list[float]:
+    """Hyperliquid hourly funding history for the active asset. Normalised to
+    ANNUALIZED pct (24 * 365) so ranks compare like-for-like with Bybit's
+    annualized reading. Returns hourly samples for the last `days` — subsampled
+    to 8h buckets to match Bybit's cadence and avoid spurious precision in the
+    rank. Empty on failure."""
+    coin = CONFIG.asset.upper()
+    start_ms = int(time.time() * 1000) - days * 86400 * 1000
+    for attempt in range(2):
+        try:
+            r = await client.post(
+                HYPERLIQUID_INFO_URL,
+                json={
+                    "type": "fundingHistory",
+                    "coin": coin,
+                    "startTime": start_ms,
+                },
+                headers={"Content-Type": "application/json"},
+                timeout=TIMEOUT,
+            )
+            r.raise_for_status()
+            data = r.json()
+            if not isinstance(data, list):
+                return []
+            # Subsample to 8h windows. HL emits hourly — every 8th entry
+            # gives us one sample per 8h to align with Bybit's cadence.
+            annualized = [float(row["fundingRate"]) * 24 * 365 * 100 for row in data]
+            return annualized[::8]
+        except (httpx.HTTPError, ValueError, KeyError, TypeError):
+            if attempt == 1:
+                return []
+            await asyncio.sleep(2)
+    return []
+
+
 async def fetch_hyperliquid_funding(client: httpx.AsyncClient) -> dict:
     """Hyperliquid publishes HOURLY funding (not 8h like CEX perps). We
     normalize to the CEX convention so the agent can compare like-for-like.
@@ -405,7 +500,8 @@ async def fetch_all() -> dict:
     syms = ",".join(SYMBOLS)
 
     async with httpx.AsyncClient() as client:
-        oi, oi_hist, liq, bybit_ticker, spot_mid, hl_funding = await asyncio.gather(
+        (oi, oi_hist, liq, bybit_ticker, spot_mid, hl_funding,
+         bybit_fhist, hl_fhist) = await asyncio.gather(
             _get(client, "/open-interest", {"symbols": syms, "convert_to_usd": "true"}),
             _get(client, "/open-interest-history", {
                 "symbols": syms, "interval": LIQUIDATION_INTERVAL,
@@ -418,6 +514,8 @@ async def fetch_all() -> dict:
             fetch_bybit_ticker(client),
             fetch_binance_spot_mid(client),
             fetch_hyperliquid_funding(client),
+            fetch_bybit_funding_history(client, limit=200),
+            fetch_hyperliquid_funding_history(client, days=90),
             return_exceptions=True,
         )
 
@@ -443,4 +541,6 @@ async def fetch_all() -> dict:
         funding_hyperliquid=_ok_dict(hl_funding, _empty_funding()),
         spot_mid=spot,
         perp_mark=perp_mark,
+        bybit_funding_history=_ok_list(bybit_fhist),
+        hl_funding_history=_ok_list(hl_fhist),
     )

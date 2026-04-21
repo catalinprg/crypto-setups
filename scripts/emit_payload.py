@@ -8,6 +8,7 @@ import sys
 from datetime import datetime, timezone
 
 from src import derivatives as derivatives_mod
+from src import eth_btc as eth_btc_mod
 from src import liquidity as liquidity_mod
 from src import options as options_mod
 from src import sessions as sessions_mod
@@ -60,11 +61,24 @@ async def _aggregated_per_tf(symbol: str, binance_ohlc: dict) -> tuple[dict, lis
 
 
 async def build() -> dict:
-    ohlc, deriv, options_block = await asyncio.gather(
-        fetch_all(),
-        derivatives_mod.fetch_all(),
-        options_mod.fetch_all(CONFIG.asset),
-    )
+    # ETH/BTC context is ETH-only; for BTC the call is skipped entirely.
+    # Running it unconditionally would add a pointless network call on every
+    # BTC run. `eth_btc_block` ends up None on BTC, `{"status": "ok", ...}`
+    # on ETH (or "unavailable" on fetch failure).
+    if CONFIG.asset == "eth":
+        ohlc, deriv, options_block, eth_btc_block = await asyncio.gather(
+            fetch_all(),
+            derivatives_mod.fetch_all(),
+            options_mod.fetch_all(CONFIG.asset),
+            eth_btc_mod.fetch(),
+        )
+    else:
+        ohlc, deriv, options_block = await asyncio.gather(
+            fetch_all(),
+            derivatives_mod.fetch_all(),
+            options_mod.fetch_all(CONFIG.asset),
+        )
+        eth_btc_block = None
 
     # --- Swings + fibs (Binance-only as before; swings need historic stability)
     all_pairs = []
@@ -272,6 +286,7 @@ async def build() -> dict:
             ]
             for period, lst in naked_pocs.items()
         },
+        "eth_btc_context": eth_btc_block,
         "venue_sources": venues_used,
     }
 

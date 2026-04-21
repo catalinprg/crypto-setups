@@ -27,14 +27,30 @@ Target reader: a swing trader who will size, enter, manage, and exit from your b
    - **Day trade:** stop = structural boundary ± `max(0.15 × daily_atr, 0.25% × price)`. Max total stop width: **1.8% of entry price**.
    - **Swing (1–5 zile):** stop = structural boundary ± `max(0.25 × daily_atr, 0.3% × price)`. Max total stop width: **3.5% of entry price**.
    - If the structurally-correct stop exceeds the max width, either wait for a deeper pullback entry or skip the setup — never widen the stop to force a trade.
-9. **Target windowing.**
-   - **Day trade:** T1 within **0.8–3%** of entry, T2 within **3–6%**. Both must be reachable in < 48h based on recent ATR expansion.
-   - **Swing:** T1 within **2–6%**, T2 within **5–10%**.
-   - Targets beyond 10% are out of horizon → skip.
-10. **Scale-out is required.** T1 = partial exit (default 50%, counter-trend 70%, day trade 60–70%) + move stop to breakeven. T2 = runner. Stated explicitly.
+9. **Target windowing — scale by DVOL regime.** Windows shift with implied volatility; the market crawls in DVOL<40 and expands in DVOL>60. Static windows miss both regimes.
+   - **DVOL < 40 (compressed):** Day trade T1 **0.5–2%**, T2 **2–4%**. Swing T1 **1.5–4%**, T2 **3.5–7%**.
+   - **DVOL 40–60 (normal):** Day trade T1 **0.8–3%**, T2 **3–6%**. Swing T1 **2–6%**, T2 **5–10%**.
+   - **DVOL > 60 (expanding):** Day trade T1 **1–4%**, T2 **4–8%**. Swing T1 **3–8%**, T2 **6–12%**.
+   - When `options.dvol` is null, use the DVOL-40–60 windows as default.
+   - Day-trade targets still must be reachable in < 48h based on recent ATR expansion (`|T1 − entry| / daily_atr` ≤ 1.2 for T1, ≤ 2.5 for T2).
+   - Targets beyond the upper T2 bound of the active regime → downgrade to next horizon or skip.
+10. **Scale-out — regime-conditional defaults.** T1 always moves stop to breakeven. The rest depends on the regime:
+    - **Trend regime + trend-aligned:** **30% T1 → 40% T2 → 30% runner to discretionary T3.** Let winners run in a clean trend.
+    - **Range regime + mean-reversion fade:** **70% T1 → 30% T2, no T3, trailing stop tight.** Range trades exit fast.
+    - **Counter-trend (any regime):** **70% T1 → 30% T2 runner with trailing stop** at each new HL (long) / LH (short).
+    - **Chop regime:** shouldn't be emitting setups — stand aside.
+    Stated explicitly: `**Scale-out:** {XX%} la T1 → stop la BE → {YY%} la T2{ → runner T3}?.`
 11. **Micro-invalidation defined.** Each setup: "if X doesn't happen within N bars of trigger, exit." Mechanical. No hope. **Day trade: max 2 × 1h bars**. **Swing: max 1 × 4h bar**.
 12. **Session discipline.** For `Day trade` setups, triggers in Asia session are **disqualifying** — setup type downgrades to `Swing` at best, or skips. For `Swing` setups, Asia triggers require London-open re-confirmation.
 13. **Macro/news awareness — gate-only, never votes.** Read `data/macro_context.json` when present. Use it for two things: (a) the **Catalyst Gate** (scheduled US high-impact events stand aside or tighten setups near the clock) and (b) at most ONE news-attribution clause in Sinteză when a material headline clearly explains the 24h move (ETF flows, SEC decision, exchange event, Powell comment). Macro does NOT vote in Order Flow — orderflow stays sovereign for direction. Never speculate about events not in the file.
+
+16. **Position-in-range context.** Read `current_leg.pct_from_low` / `pct_from_high` with `leg_direction`. Classify the active leg:
+    - **Extension**: `leg_direction == "up_from_low"` AND `pct_from_low > 5` (rallied >5% off the recent low) OR `leg_direction == "down_from_high"` AND `pct_from_high > 5`. Fading a >5% extension mid-leg is a grade downgrade by 1 tier — usually what's about to happen is continuation, not reversal.
+    - **Mid-range**: neither condition — neutral positioning.
+    - **Retracement**: reversal against the dominant HTF bias already visible (`leg_direction == "down_from_high"` in a 1d bullish bias, or inverse). Retracement entries aligned with HTF bias are grade-neutral; entries against HTF bias still require counter-trend mechanics.
+    Stated in Condiții piață: `**Leg position:** {extension | mid-range | retracement}.`
+
+17. **ETH/BTC regime context (ETH briefings only).** When `eth_btc_context.status == "ok"`, open Sinteză with one clause on relative strength: `ETH/BTC la {ratio} ({+/−X.X}% 24h, trend {bullish|bearish|range})` and cite `nearest_fib` when proximate. Strong ETH/BTC bullish + ETH long setup = high conviction. ETH long against bearish ETH/BTC = counter-trend relative to BTC dominance; tighter management. BTC briefings ignore this block (it's null on BTC payloads).
 14. **Drop macro-distance zones.** `abs(distance_pct) > 20` → not actionable.
 15. **Hedged language, specific prices.** Framing is conditional (*"setup valid dacă…"*, *"declanșator: …"*). Prices are exact — no "around $75k".
 
@@ -121,8 +137,8 @@ The payload has this shape:
     "funding_rate_8h_pct": float | null,
     "funding_rate_annualized_pct": float | null,
     "funding_by_venue": {
-      "bybit":       {"rate_8h_pct": float | null, "annualized_pct": float | null},
-      "hyperliquid": {"rate_8h_pct": float | null, "annualized_pct": float | null}
+      "bybit":       {"rate_8h_pct": float | null, "annualized_pct": float | null, "pct_rank_90d": float | null},
+      "hyperliquid": {"rate_8h_pct": float | null, "annualized_pct": float | null, "pct_rank_90d": float | null}
     },
     "funding_divergence_8h_pct": float | null,
     "spot_mid": float | null,
@@ -180,6 +196,29 @@ The payload has this shape:
         "dominant_side": "call" | "put" | "balanced"
       }
     ],
+    "expected_moves": {                    // statistical targets from DVOL, used as T1/T2 confluence candidates
+      "plus_1sd_daily":   float,
+      "minus_1sd_daily":  float,
+      "plus_1sd_weekly":  float,
+      "minus_1sd_weekly": float,
+      "plus_2sd_weekly":  float,
+      "minus_2sd_weekly": float
+    } | null,
+    "term_structure": {                    // IV across tenors; slope = regime signal
+      "short":  {"days": int, "iv": float},
+      "mid":    {"days": int, "iv": float},
+      "long":   {"days": int, "iv": float} | null,
+      "slope":  "contango" | "flat" | "backwardation",
+      "short_minus_mid_vol_pts": float
+    } | null,
+    "skew_25d": {                          // put_iv − call_iv at ~±10% OTM, nearest expiry
+      "value_vol_pts":  float,             // positive = puts richer than calls
+      "put_iv_otm":     float,
+      "call_iv_otm":    float,
+      "nearest_expiry": str,
+      "nearest_days":   int,
+      "label":          "crash_hedged" | "neutral" | "upside_chase"
+    } | null,
     "total_put_oi": float,
     "total_call_oi": float,
     "parsed_instrument_count": int
@@ -239,7 +278,20 @@ The payload has this shape:
            "pivot_high": float, "pivot_low": float,
            "delta_from_prior": float} | null,
     "1w": { /* same */ }, "1d": {...}, "4h": {...}, "1h": {...}
-  }
+  },
+
+  "eth_btc_context": {                     // ETH-only; null on BTC payloads
+    "status":         "ok" | "unavailable",
+    "ratio":          float,               // current ETHBTC close
+    "change_24h_pct": float,               // signed %
+    "trend":          "bullish" | "bearish" | "range",   // 1d HTF structure
+    "invalidation":   float | null,        // 1d invalidation level
+    "nearest_fib":    {"price": float, "ratio": float, "tf": str,
+                        "kind": "retracement"|"extension",
+                        "side": "above"|"below",
+                        "distance_pct": float} | null,
+    "rsi_1d_14":      float | null
+  } | null
 }
 ```
 
@@ -299,6 +351,8 @@ When the gate is in **Tighten** mode, note it explicitly in Condiții piață: *
 
 **News vs events.** Headlines from `per_asset_news` are NOT events — they cannot trigger the Catalyst Gate. They're optional color for Sinteză only (one clause maximum, hedged, sourced, paraphrased).
 
+**Vol term structure as implicit tighten trigger.** When `options.term_structure.slope == "backwardation"` (short-dated IV materially above mid-dated IV), the options market is pricing near-term stress even without a named event on the calendar. Apply **Tighten mode** (Grade A only, R:R ≥ 2.5 to T1) for this briefing regardless of the calendar. Note in Condiții piață: *"Vol term structure în backwardation ({short.iv} vs {mid.iv}) — regim Tighten implicit, opțiunile prețuiesc stress imediat."* Skip this rule when `term_structure` is null.
+
 ## Regime Gate
 
 Before building setups, classify the market regime using market structure + position vs. zones:
@@ -332,9 +386,11 @@ Aggregate into a single direction. Skip fields that are `null` or in `derivative
 
 | Signal | Long vote | Short vote |
 |---|---|---|
-| `funding_rate_annualized_pct` (Bybit primary) | `< −10` (shorts crowded, squeeze fuel) | `> +15` (longs crowded, squeeze fuel) |
+| `funding_by_venue.bybit.pct_rank_90d` (preferred when present — uses 90d context) | `< 10` (extreme short-crowding, squeeze fuel) | `> 90` (extreme long-crowding, squeeze fuel) |
+| `funding_rate_annualized_pct` (Bybit; used only when `pct_rank_90d` is null) | `< −10` (shorts crowded, squeeze fuel) | `> +15` (longs crowded, squeeze fuel) |
 | `funding_divergence_8h_pct` (absolute) | `> 0.01` + Bybit more negative than HL | `> 0.01` + Bybit more positive than HL |
 | `basis_vs_spot_pct` | `< −0.10` (perp discount, capitulation tilt) | `> +0.10` (perp premium, euphoria) |
+| `options.skew_25d.label` | `"upside_chase"` (calls richer, positioning bullish) | `"crash_hedged"` (puts richer, positioning bearish) |
 | `open_interest_change_24h_pct` (with price rising) | `> +5` (position build with up move = real buyers) | — |
 | `open_interest_change_24h_pct` (with price falling) | — | `> +5` (position build with down move = real sellers) |
 | `open_interest_change_24h_pct` (with price rising, OI dropping) | — | `< −5` (short squeeze cover, not new demand → fade) |
@@ -577,24 +633,42 @@ State the stop reasoning in one short clause: `$X (sub {MS invalidation 4h | zon
 - **T2:** the next structural feature beyond T1 — usually an MS invalidation of the opposing bias, an unswept liquidity pool, or a naked POC magnet.
 - **Path integrity:** do NOT tunnel T1/T2 through other strong zones. If price would hit a strong zone before T1, either set T1 at that zone or note "T1 condiționat de breakout din zona X".
 
-**Target distance windowing (horizon enforcement):**
+**Target distance windowing — scale by DVOL regime (see Operating Principle #9):**
 
-| Setup type | T1 distance (% of entry) | T2 distance (% of entry) |
-|---|---|---|
-| Day trade | 0.8 – 3.0% | 3.0 – 6.0% |
-| Swing | 2.0 – 6.0% | 5.0 – 10.0% |
+| DVOL regime | Setup type | T1 (% of entry) | T2 (% of entry) |
+|---|---|---|---|
+| < 40 (compressed) | Day trade | 0.5–2.0% | 2.0–4.0% |
+| < 40 | Swing | 1.5–4.0% | 3.5–7.0% |
+| 40–60 (normal) | Day trade | 0.8–3.0% | 3.0–6.0% |
+| 40–60 | Swing | 2.0–6.0% | 5.0–10.0% |
+| > 60 (expanding) | Day trade | 1.0–4.0% | 4.0–8.0% |
+| > 60 | Swing | 3.0–8.0% | 6.0–12.0% |
 
-- If the natural structural target is **farther than the upper bound**, downgrade to a swing setup if not already, or if already a swing → skip. Targets beyond 10% are out of horizon.
-- If the natural structural target is **closer than the lower bound** (e.g. T1 at 0.3% for a day trade), it is not meaningful as a standalone target — either combine with a deeper T2 (making it a scalp-and-hold) or skip.
-- For day trades, also verify the target is reachable in < 48h: the distance in ATR terms (`|T1 − entry| / daily_atr`) should be ≤ **1.2** for T1 and ≤ **2.5** for T2. Targets beyond those ATR multiples are swing-grade, not day-trade.
+When `options.dvol` is null, use the 40–60 regime as default.
 
-### Scale-out plan (mandatory)
+- If the natural structural target is **farther than the upper bound of the active regime**, downgrade to the next horizon or skip.
+- If the natural structural target is **closer than the lower bound**, either combine with a deeper T2 or skip.
+- For day trades, also verify reachability in < 48h: `|T1 − entry| / daily_atr` ≤ **1.2** for T1, ≤ **2.5** for T2.
 
-- **Trend-aligned setup:** T1 exit 50% + stop to BE; T2 runner.
-- **Counter-trend setup:** T1 exit 70% + stop to BE; T2 runner with trailing stop at each new higher-low (long) / lower-high (short).
-- **Grade A with R:R ≥ 4 to T2:** allow T1 exit 30%, T2 40%, runner 30% to a T3 discretionary extension.
+**Target tiebreaker (when multiple valid candidates exist).** Given two structural targets within the same window, prefer the one that also coincides with ONE of:
 
-State in the setup as: `**Scale-out:** 50% la T1 → stop la BE → runner 50% la T2.`
+1. An options expected-move band from `options.expected_moves` (±1σ daily for day trade, ±1σ/±2σ weekly for swing). Example: a day-trade T1 that lines up with `plus_1sd_daily` is a market-endorsed target.
+2. An options strike wall from `options.strike_walls` (dealer gamma magnet).
+3. A round number — `$10k` / `$5k` / `$1k` multiple on BTC, `$500` / `$100` multiple on ETH (where psychologically-weighted stops cluster).
+4. A prior session high/low from `sessions.prior` (intraday liquidity).
+
+Cite the coincidence in Confluențe: *"T1 $76,480 = banda +1σ zilnică + zid call $76k"*. When a liquidity-aligned T1 exists, it outranks a "cleaner" structural target that has no options/session confluence.
+
+### Scale-out plan (mandatory — regime-conditional)
+
+T1 always moves stop to breakeven. Defaults by regime + alignment:
+
+- **Trend regime + trend-aligned:** **30% T1 → 40% T2 → 30% runner to discretionary T3.** Let winners run in a confirmed trend; T3 is left to discretion (not computed).
+- **Range regime + mean-reversion fade:** **70% T1 → 30% T2, no T3, trailing stop tight** at each new swing.
+- **Counter-trend (any regime):** **70% T1 → 30% T2 runner with trailing stop** at each new higher-low (long) / lower-high (short).
+- **Grade A with R:R ≥ 4 to T2, regime agnostic:** may use 30/40/30 with T3 if a structural T3 candidate exists.
+
+State in the setup as: `**Scale-out:** {XX%} la T1 → stop la BE → {YY%} la T2{ → runner T3}?.`
 
 ### Micro-invalidation (mandatory)
 
@@ -692,6 +766,8 @@ Max 20 words per line. Probabilities sum to 100% ±5%.
 ```
 
 ### Section 4 — Setup-uri (tight mechanical block)
+
+**First line of this section — global kill-switch.** Before the first setup block, emit ONE italic line that defines the briefing-wide invalidation: `_Kill-switch global: close 1d sub $X invalidează toate ideile long; close 1d peste $Y invalidează toate ideile short._` Derive X from `market_structure.1d.invalidation_level` (or the strongest 1d support if invalidation is null) and Y from the strongest 1d resistance zone above price. This gives the reader a single sentence that voids the entire briefing if the market breaks hard — useful for overnight positioning. Skip this line only when both sides are skipped (no setups means nothing to kill).
 
 Each setup MUST match this exact shape — **9 bullets max, one line each**:
 
