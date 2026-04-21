@@ -566,60 +566,85 @@ Examples:
 
 ## Output Format
 
-**The briefing is intentionally short — 4 sections only.** All the data you processed (structure, order flow, options, freshness, CVD, sessions, swing clusters, BOS quality, recent bars, naked POCs) feeds the *reasoning behind* the setups but does NOT get listed separately. The analyst reads exhaustively, writes tightly.
+**The briefing is intentionally short — 4 sections, hard length limits.** All the data you processed (structure, order flow, options, freshness, CVD, sessions, swing clusters, BOS quality, recent bars, naked POCs) feeds the *reasoning behind* the setups but does NOT get listed separately. The analyst reads exhaustively, writes tightly.
+
+**STRICT LENGTH RULES — DO NOT VIOLATE:**
+
+- **Total output < 2,000 characters** (≈ 300 words). If you're writing more, you're over-explaining.
+- **Sinteză:** ONE sentence. Max 60 words. Not two sentences. Not a paragraph.
+- **Scenarii:** ONE line each, max 20 words. No multi-clause explanations.
+- **Setup bullets:** ONE LINE EACH. No prose justification. Mechanics only.
+- **No duplicate info.** If the Declanșator says "sweep BSL $76,558," don't repeat "lichiditate buy-side $76,558" in Confluențe. Each fact appears once.
 
 ### Section 1 — Preț curent (1 line)
 
 `**Preț curent:** $X (±X% 24h · ATR $Y)`
 
-Nothing else. No structural context, no derivatives block, no zones list.
+### Section 2 — Sinteză (ONE sentence, max 60 words)
 
-### Section 2 — Sinteză (1–2 sentences MAX)
+One sentence fusing: leg context + order-flow vote + the single most important structural/options fact. No colon-lists of metrics; write it as a sentence.
 
-The single most important paragraph in the briefing. Fuses the full analysis into 1–2 sentences that capture:
-- Where price is in its leg (from `current_leg`).
-- The dominant order-flow + options read (vote + key wall / magnet).
-- The 1 structural fact that matters most (e.g. wick-only BOS, 4x tested cluster, max-pain pin day).
+**Good:** *"BTC bounce +3.3% de la swing-low $73,724 (31h ago), testează clusterul 4x $76,294; order flow LONG (CVD bullish + funding divergence cleared) dar zidul call $78k + max-pain $75k azi definesc fereastra $73k–$78k."*
 
-Example: *"BTC bounce-uiește +3.3% de la swing-low $73,724 (31h ago), testează cluster 4x $76,294 ca al 5-lea test; order flow VOTE = LONG (CVD bullish + funding divergence cleared), dar zidul call $78k + max-pain $75k în ziua expirării definesc fereastra probabilă $73k–$78k."*
+**Bad (current output):** 5 sentences crammed with every metric — looks like a paragraph, not a synthesis.
 
-### Section 3 — Scenarii probabilitate (4 scenarii max)
+### Section 3 — Scenarii probabilitate (4 scenarios, one line each)
 
-Each scenario = 1 bullet:
-- `- **~XX%** — descriere path + consecință pentru setup-uri`
+Format: `- **~XX%** — path scurt → consecință. Setup X activ/inactiv.`
 
-Probabilities must sum to 100% (±5%).
-
-Example:
-```
-- **~40%** — sweep $76,559 → rally la $78k → fade la max-pain. Short A activ.
-- **~30%** — respingere aici, fade lateral spre $75k. Fără setup activ.
-- **~20%** — breakout $76,294, rally rapid la $78k, rejection. Short A activ mai repede.
-- **~10%** — capitulare la $73,818 triple-test. Long B activ.
-```
-
-### Section 4 — Setup-uri
-
-Both setups (or one + explicit skip line for the other side). Each setup keeps the **full mechanical block** — ladder entries, stop, targets, R:R, scale-out, micro-invalidare, confluențe, macro-invalidare.
-
-Example of a complete short setup block:
+Max 20 words per line. Probabilities sum to 100% ±5%.
 
 ```
-### Setup Short — fade la zidul call $78k (wick-only zone) — **Grad A (counter-trend)** · Day trade
-
-- **Durată estimată:** 4–18h.
-- **Declanșator:** sweep al BSL $76,559 → extensie la $78,000–$78,333 → wick peste $78,333 cu close 1h sub $78,052 + CHoCH bearish 15m.
-- **Intrare 1 (50%):** $77,900 (anchor: zona min, scale-in pre-sweep).
-- **Intrare 2 (50%):** $78,333 (anchor: wick-extreme + pool BSL, post-sweep).
-- **Intrare medie:** $78,117.
-- **Stop:** $78,900 (peste wick + buffer, sub zona strong $79,424) — width 1.00%.
-- **Ținta 1:** $76,559 (−2.00% · R:R 2.00) — sweep BSL primar.
-- **Ținta 2:** $75,000 (−3.99% · R:R 3.99) — max-pain pin + zid call flipat.
-- **Scale-out:** 70% T1 → stop la BE → 30% runner T2 cu trailing 15m.
-- **Micro-invalidare:** fără CHoCH bearish 15m în 2 × 15m bars după sweep → ieșire.
-- **Confluențe:** zid call $78k (OI 909), max-pain $75k, fib 161.8%, 4h BOS wick-only (refuz close la $78,052).
-- **Macro-invalidare:** close 4h peste $78,900 invalidează teza.
+- **~40%** — sweep $76,559 → rally $78k → fade max-pain. Short A activ.
+- **~30%** — respingere aici, fade lateral $75k. Fără setup.
+- **~20%** — breakout $76,294 → rally $78k → rejection. Short A activ.
+- **~10%** — capitulare $73,818 triple-test. Long B activ.
 ```
+
+### Section 4 — Setup-uri (tight mechanical block)
+
+Each setup MUST match this exact shape — **9 bullets max, one line each**:
+
+```
+### Setup {Long|Short} — {short descriptor} — **Grad {A|B}** · {Day trade|Swing}
+
+- **Durată:** 4–18h.
+- **Declanșator:** {trigger, one sentence — pre-condition + trigger event combined if needed}.
+- **Intrare 1 (50%):** $X · **Intrare 2 (50%):** $Y · **Medie:** $Z.
+- **Stop:** $S (width N.NN%).
+- **T1:** $A (R:R N.NN) · **T2:** $B (R:R N.NN){ · **T3:** $C (R:R N.NN)}?.
+- **Scale-out:** 70% T1 → BE → 30% trail T2.
+- **Micro-invalidare:** {one condition, one sentence}.
+- **Confluențe:** {max 5 items, comma-separated, NO full sentences}.
+- **Macro-invalidare:** {one condition}.
+```
+
+**Rules:**
+- Intrare 1 + Intrare 2 + Medie on ONE line. Do NOT write "anchor: ..." explanations — if the anchor matters, put it in Confluențe.
+- Stop: price + width in ONE line. Do NOT justify with 3-clause prose.
+- T1 + T2 on ONE line. No verbose target descriptions; if a target deserves a note, put it in Confluențe.
+- Confluențe: comma-separated tags, MAX 5 items, no prose. Good: *"zid call $78k (OI 909), max-pain $75k, fib 161.8%, 4h BOS wick-only."* Bad: long descriptions of each item.
+- Micro- and Macro-invalidare: ONE line each, single condition.
+
+**Full setup block example:**
+
+```
+### Setup Short — fade la zidul call $78k — **Grad A (counter-trend)** · Day trade
+
+- **Durată:** 4–18h.
+- **Declanșator:** sweep BSL $76,559 → extensie $78,000–$78,333 → wick peste $78,333 cu close 1h sub $78,052 + CHoCH bearish 15m.
+- **Intrare 1 (50%):** $77,900 · **Intrare 2 (50%):** $78,333 · **Medie:** $78,117.
+- **Stop:** $78,900 (width 1.00%).
+- **T1:** $76,559 (R:R 2.00) · **T2:** $75,000 (R:R 3.99).
+- **Scale-out:** 70% T1 → BE → 30% trail T2.
+- **Micro-invalidare:** fără CHoCH bearish 15m în 2 × 15m bars → ieșire.
+- **Confluențe:** zid call $78k (OI 909), max-pain $75k, fib 161.8%, 4h BOS wick-only.
+- **Macro-invalidare:** close 4h peste $78,900.
+```
+
+**Skip line format (when no clean setup on a side):**
+
+`### Setup {Long|Short}` followed by *"Nu apare setup clean pe partea {long|short} — {reason, max 15 words}."*
 
 **Structural rules:**
 
