@@ -1,0 +1,249 @@
+{
+  "timestamp_utc": "2026-04-21T11:29:43Z",
+  "per_asset_news": {
+    "btc": {
+      "display": "BTC",
+      "relevance_terms": [
+        "Bitcoin",
+        "BTC",
+        "spot ETF",
+        "IBIT",
+        "FBTC",
+        "ARKB",
+        "GBTC",
+        "BlackRock",
+        "Fidelity",
+        "SEC",
+        "ETF flows",
+        "halving",
+        "miner",
+        "hashrate"
+      ],
+      "sources_used": [
+        "coindesk",
+        "cointelegraph"
+      ],
+      "items": [
+        {
+          "headline": "Bitcoin climbs as risk sentiment improves, altcoins hit by exploit concerns",
+          "source": "coindesk",
+          "published": "2026-04-21T10:36:06+00:00",
+          "url": "https://www.coindesk.com/markets/2026/04/21/bitcoin-climbs-as-risk-sentiment-improves-altcoins-hit-by-exploit-concerns",
+          "summary": "Bitcoin climbs as risk sentiment improves, altcoins hit by exploit concerns",
+          "content": "Bitcoin climbs as risk sentiment improves, altcoins hit by exploit concerns\nBitcoin advanced while altcoins continued to struggle after the weekend's DeFi exploit, with markets eyeing Middle East tensions and shifting risk sentiment.\nWhat to know:\n- Bitcoin rose to $76,500 and faced resistance near $77,000 as traders defended a breakout above $78,300.\n- Ether and altcoins lagged after the $290 million KelpDAO exploit, with DeFi tokens under pressure and sentiment still fragile.\n- Markets are tracking developments in the war with Iran, with easing tensions potentially boosting risk assets and weighing on oil.\nThe crypto market is showing signs of strength on Tuesday with bitcoin\nThe price spiked to around $77,000 at 9:45 a.m. before meeting a wave of spot sellers, who are probably protecting a potential breakout above Friday's high of $78,300.\nEther (ETH) lagged behind bitcoin, rising just 0.3% to $2,320 as investors remained cautious around altcoins following the $290 million exploit on KelpDAO over the weekend.\nPrice action is still being dictated by the war in Iran, with the U.S. vice president due to travel to Pakistan for peace talks. A resolution is likely to lower oil prices, helping boost risk assets that have been inversely correlated since the war began.\nU.S. stock index futures rose, demonstrating a return to risk-on sentiment.\nDerivatives positioning\n- The long-short ratio for the crypto futures market is 50.68%, indicating a near-even split between bullish and\u2026"
+        },
+        {
+          "headline": "Scammers demand crypto from stranded ships in Strait of Hormuz: Report",
+          "source": "cointelegraph",
+          "published": "2026-04-21T09:53:55+00:00",
+          "url": "https://cointelegraph.com/news/fraudsters-pose-iranian-authorities-crypto-stranded-ships-hormuz?utm_source=rss_feed&utm_medium=rss&utm_campaign=rss_partner_inbound",
+          "summary": "Shipping companies stranded near the Strait of Hormuz are reportedly being targeted by scammers posing as Iranian authorities, demanding Bitcoin or USDt for \u201csafe passage.\u201d",
+          "content": "Fraudulent actors posing as Iranian authorities have reportedly sent messages to shipping companies whose vessels remain stranded west of the Strait of Hormuz, demanding payment in cryptocurrency for safe passage.\nOn Monday, maritime risk company Marisks issued a warning saying unknown groups had contacted shipowners claiming to represent Iranian security services and requesting transit \u201cfees\u201d in Bitcoin (BTC) or USDt (USDT) in exchange for clearance through the strait, according to Reuters.\n\u201cThese specific messages are a scam,\u201d Marisks reportedly said, adding that they do not originate from Iranian authorities. Tehran has not publicly commented on the claims.\nThe alerts come as the strategic waterway remains largely closed following the outbreak of conflict in the Middle East. The Strait of Hormuz, a critical chokepoint for global energy flows, previously handled around one-fifth of the world\u2019s oil and liquefied natural gas exports before hostilities escalated in the region.\nEarlier this month, reports said Iran was considering charging ships passing through the Strait of Hormuz a tariff payable in Bitcoin, with empty tankers allowed free passage while others could be charged around $1 per barrel of oil.\nRelated: Iran views BTC as strategic asset, but USDt still dominates oil tolls: BPI\nCrypto \u201ctransit fee\u201d scam demands verification docs\nThe reported scam messages instruct recipients to submit documentation for verification before being assigned a \u201cfee\u201d payable in\u2026"
+        },
+        {
+          "headline": "Strategy overtakes BlackRock IBIT in bitcoin holdings after bear market buying",
+          "source": "coindesk",
+          "published": "2026-04-21T09:39:06+00:00",
+          "url": "https://www.coindesk.com/markets/2026/04/21/strategy-overtakes-blackrock-ibit-in-bitcoin-holdings-after-bear-market-buying",
+          "summary": "Strategy overtakes BlackRock IBIT in bitcoin holdings after bear market buying",
+          "content": "Strategy overtakes BlackRock IBIT in bitcoin holdings after bear market buying\nLeveraged accumulation and new capital tools push MSTR ahead of the world\u2019s largest spot bitcoin ETF.\nWhat to know:\n- Strategy now holds 815,061 BTC, surpassing IBIT\u2019s 802,824 BTC, marking its first lead since Q2 2024.\n- Strategy held 189,150 BTC at the start of Q1 2024. IBIT surpassed it by early Q2 with roughly 273,000 BTC, compared with Strategy\u2019s 214,400 BTC, a lead which it consistently maintained until now.\n- Strategy pulled ahead by aggressively accumulating nearly 80,000 BTC in 2026.\nStrategy (MSTR), now holds more bitcoin\nThe world\u2019s largest publicly traded BTC holder recently announced its third-largest bitcoin purchase on record, acquiring 34,164 BTC and bringing its total holdings to 815,061 BTC.\nIBIT currently holds 802,824 BTC, leaving Strategy ahead by more than 12,000 BTC. While the gap is not anything meaningful in relative terms, it is symbolically important given IBIT\u2019s rapid growth since launch. IBIT became the fastest ETF in history to reach $70 billion in assets, while IBIT ranks among BlackRock\u2019s top revenue drivers.\nStrategy held 189,150 BTC at the start of Q1 2024. IBIT surpassed it by early Q2 with roughly 273,000 BTC, compared with Strategy\u2019s 214,400 BTC, a lead which it consistently maintained until now.\nHowever, the two vehicles are fundamentally different. Strategy is an operating company that uses financial engineering, including at-the-market (ATM) equity issuance,\u2026"
+        },
+        {
+          "headline": "Bitcoin is now calmer than South Korea's stock market. Here's why it matters",
+          "source": "coindesk",
+          "published": "2026-04-21T09:25:24+00:00",
+          "url": "https://www.coindesk.com/markets/2026/04/21/bitcoin-is-less-volatile-than-south-korea-s-stock-market-right-now",
+          "summary": "Bitcoin is now calmer than South Korea's stock market. Here's why it matters",
+          "content": "Bitcoin is now calmer than South Korea's stock market. Here's why it matters\nBitcoin's comparative stability during geopolitical turmoil has reinforced its appeal as a hedge.\nWhat to know:\n- Bitcoin's 30-day realized volatility has fallen below that of South Korea's Kospi and Pakistan's KSE 100 indexes, challenging its reputation as the most turbulent asset.\n- Recent war-driven energy shocks and a spike in oil prices have made Korean and Pakistani stocks more volatile, while bitcoin has traded in a relatively narrow range between about $65,000 and $75,000.\n- Bitcoin's comparative stability during geopolitical turmoil has reinforced its appeal as a hedge.\nBitcoin\nBitcoin's 30-day realized volatility, currently 42%, has remained below 50% this month, according to TradingView data. Compare that with South Korea's benchmark Kospi stock index, whose market capitalization is about twice the largest cryptocurrency's, which hit 74% last week and is still around 51%. Another more volatile equity market is Pakistan, whose KSE 100 index is also around 51%.\nBitcoin\u2019s volatility \u2014 a measure of how wildly prices have swung \u2014 has steadily declined in recent years, particularly since the introduction of spot ETFs in the U.S. in January 2024. These investment vehicles have increased institutional participation, bringing in more risk-managed capital flows that have helped dampen price swings.\nThe relative stability underscores its appeal as a geopolitical hedge, holding its value when macro\u2026"
+        },
+        {
+          "headline": "Philippines SEC warns on dYdX, six other unauthorized crypto platforms",
+          "source": "cointelegraph",
+          "published": "2026-04-21T09:22:30+00:00",
+          "url": "https://cointelegraph.com/news/philippines-sec-warns-dydx-crypto-platforms-investor-alert?utm_source=rss_feed&utm_medium=rss&utm_campaign=rss_partner_inbound",
+          "summary": "Promoters of flagged platforms may face fines of up to 5 million Philippine pesos ($89,000) or up to 21 years in prison under Philippine securities law.",
+          "content": "The Philippine Securities and Exchange Commission (SEC) has issued a public investor alert warning Filipinos not to invest in dYdX and six other crypto trading platforms, saying they are not registered or authorized to solicit investments in the country.\nIn a Facebook post on Tuesday, the SEC named dYdX, Aevo, gTrade, Pacifica, Orderly, Deriv and Ostium, stating that based on its findings, the platforms appear to be offering investments to the public in exchange for promised returns, profits or interest.\nThe regulator said none of the listed entities are registered with the Commission or hold the required authorization under its crypto-asset service provider (CASP) framework, which requires firms offering crypto-related services in the Philippines to obtain licenses and meet capital and operational requirements.\nThe SEC also warned that individuals promoting any of the listed platforms in the Philippines may face criminal liability under the Securities Regulation Code. Under Sections 28 and 73 of the law, violators could be fined up to 5 million Philippine pesos (about $89,000) or imprisoned for up to 21 years, or both.\nThe advisory highlights a broader shift toward stricter enforcement in the Philippines, where regulators have increasingly moved from warnings to access restrictions. On Dec. 24, 2025, Philippine regulators blocked Coinbase and Gemini as part of their broader crackdown on unlicensed CASPs.\nBroader crackdown on unlicensed crypto operators\nThe latest advisory\u2026"
+        }
+      ]
+    },
+    "eth": {
+      "display": "ETH",
+      "relevance_terms": [
+        "Ethereum",
+        "ETH",
+        "Ether",
+        "spot ETH ETF",
+        "ETHA",
+        "ETHE",
+        "Vitalik",
+        "Buterin",
+        "staking",
+        "Lido",
+        "validator",
+        "Dencun",
+        "Pectra",
+        "L2",
+        "rollup",
+        "SEC"
+      ],
+      "sources_used": [
+        "coindesk",
+        "cointelegraph"
+      ],
+      "items": [
+        {
+          "headline": "European banks tap Fireblocks for MiCA-compliant euro stablecoin",
+          "source": "cointelegraph",
+          "published": "2026-04-21T08:01:03+00:00",
+          "url": "https://cointelegraph.com/news/european-banks-tap-fireblocks-for-mica-compliant-euro-stablecoin?utm_source=rss_feed&utm_medium=rss&utm_campaign=rss_partner_inbound",
+          "summary": "A 12-bank European consortium led by Qivalis is partnering with Fireblocks to develop a regulated euro stablecoin under MiCA, targeting launch in the second half of 2026.",
+          "content": "A consortium of 12 European banks led by Qivalis has selected digital asset custody provider Fireblocks to provide infrastructure for a Markets in Crypto Assets Regulation (MiCA)-compliant euro stablecoin, according to a Tuesday release shared with Cointelegraph.\nQivalis\u2019s stablecoin is intended to support institutional use cases such as settlement, treasury and tokenized assets. Fireblocks said it will provide tokenization technology, wallet infrastructure, custody, and other important tools and features to support compliance, such as identity verification and sanctions screening.\nQivalis, launched in 2025, is a Netherlands-based venture backed by major banks including BBVA, BNP Paribas, ING and UniCredit, which plans to issue a fully regulated, 1:1-backed euro token structured as an electronic money institution under Dutch supervision. The group says it is targeting a launch in the second half of 2026, subject to approval from the Dutch central bank, De Nederlandsche Bank, under the European Union\u2019s MiCA regulatory framework.\nEuropean banks push euro stablecoin to counter dollar dominance\nThe project comes as dollar-denominated stablecoins dominate the global stablecoin market. According to DeFiLlama data, the total global stablecoin market capitalization is around $320 billion, with roughly 99% of supply tied to the US dollar and only a small share denominated in euros.\nEuropean banks and policymakers are stepping up efforts to reduce reliance on dollar stablecoins in\u2026"
+        },
+        {
+          "headline": "Singapore\u2019s OCBC launches tokenized gold fund on Ethereum and Solana",
+          "source": "cointelegraph",
+          "published": "2026-04-21T06:41:15+00:00",
+          "url": "https://cointelegraph.com/news/ocbc-tokenized-gold-fund-ethereum-solana?utm_source=rss_feed&utm_medium=rss&utm_campaign=rss_partner_inbound",
+          "summary": "The value of tokenized real-world assets on public blockchains is estimated at more than $29 billion, up more than 10% in the last 30 days.",
+          "content": "OCBC, one of Singapore\u2019s largest banking and financial services corporations, has launched a tokenized physical gold fund, with the underlying token, GOLDX, issued on both Ethereum and Solana.\nThe launch was made together with its asset management arm, Lion Global Investors and digital asset exchange DigiFT. The token is aimed at institutional investors, hedge funds and asset managers and can be bought and sold using both stablecoins and fiat currencies. After subscription, the token is delivered directly to investors\u2019 blockchain wallets, OCBC said on Monday.\nKenneth Lai, head of global markets at OCBC, said the move is part of a new corporate strategy and a milestone in the corporation\u2019s blockchain-focused approach.\n\u201cWe believe digital assets will play an increasingly important role in financial services and our focus is on bridging traditional finance with the emerging world of decentralized finance,\u201d he said.\nThe value of tokenized real-world assets on public blockchains has been on the rise in 2026, and is sitting at over $29 billion, up over 10% in the last 30 days, according to data from rwa.xyz.\nGOLDX token tied to a physical gold fund\nOCBC\u2019s GOLDX token offers on-chain exposure to the LionGlobal Singapore Physical Gold Fund, which launched in December and had about $525 million (669 million Singapore dollars) in assets under management as of April 16, according to OCBC.\nRelated: Singapore Gulf Bank adds stablecoin mint and redeem for 24/7 settlement\nThe goal of the\u2026"
+        },
+        {
+          "headline": "Arbitrum freezes $71M of Ether connected to Kelp exploit",
+          "source": "cointelegraph",
+          "published": "2026-04-21T06:00:03+00:00",
+          "url": "https://cointelegraph.com/news/arbitrum-freezes-71m-ether-connected-kelp-exploit?utm_source=rss_feed&utm_medium=rss&utm_campaign=rss_partner_inbound",
+          "summary": "Griff Green, a member of Arbitrum\u2019s security council, said the group acted with input from law enforcement and \u201cdid not make this decision lightly.\"",
+          "content": "Ethereum layer-2 blockchain Arbitrum on Monday froze more than 30,000 Ether worth about $71.2 million held in a wallet connected to the recent exploit of the Kelp protocol.\nArbitrum said on Monday that its security council, a 12-member body elected by the Arbitrum community, took \u201cemergency action\u201d to freeze 30,766 Ether (ETH) that was held in a wallet connected to the Kelp exploit.\nIt added that the ETH had been moved to \u201can intermediary frozen wallet\u201d and was \u201cno longer accessible to the address that originally held the funds, and can only be moved by further action by Arbitrum governance.\u201d\nKelp, a liquid restaking protocol, was hacked for at least $293 million on Saturday through its LayerZero-powered bridge, with LayerZero accusing North Korea of carrying out the attack.\nThe exploit has caused millions of dollars' worth of \u201cbad debt\u201d in the highly interconnected crypto lending market, as the attackers used stolen Kelp tokens to borrow cryptocurrencies on the lending platform Aave.\nA blockchain freezing crypto is a divisive measure in the crypto sector, with opponents of freezes arguing that such action is antithetical to the purpose of the technology, while supporters argue it enhances security and maintains a network\u2019s integrity.\nMultiple users on X criticized Arbitrum over the freeze and questioned its decentralization in light of funds being frozen by decree of a council.\nRelated: Hackers impersonated eth.limo team to hijack its domain: Post-mortem\nGriff Green, a\u2026"
+        },
+        {
+          "headline": "Arbitrum freezes $71 million in ether tied to Kelp DAO exploit",
+          "source": "coindesk",
+          "published": "2026-04-21T05:55:47+00:00",
+          "url": "https://www.coindesk.com/markets/2026/04/21/arbitrum-freezes-usd71-million-in-ether-tied-to-kelp-dao-exploit",
+          "summary": "Arbitrum freezes $71 million in ether tied to Kelp DAO exploit",
+          "content": "Arbitrum freezes $71 million in ether tied to Kelp DAO exploit\nThe layer-2 network's security council moved 30,766 ETH to a frozen intermediary wallet, accessible only via further governance action.\nWhat to know:\n- Arbitrum's Security Council has frozen 30,766 ETH, worth about $71 million, linked to the $292 million rsETH exploit against Kelp DAO, placing the funds in a governance-controlled wallet.\n- The emergency action, taken with input from law enforcement and without affecting other Arbitrum users or applications, prevents the original exploiter from accessing the seized funds.\n- The freeze recovers roughly a quarter of the stolen assets and intensifies the dispute between Kelp and bridge provider LayerZero over responsibility for the hack and how remaining losses should be shared.\nA chunk of the Kelp DAO haul is no longer going anywhere.\nArbitrum's Security Council froze 30,766 ETH worth roughly $71 million on Monday night, moving funds linked to Saturday's $292 million rsETH exploit into an intermediary wallet that can only be accessed through further Arbitrum governance action.\nrsETH is a liquid restaking token issued by KelpDAO and represents a user's position in restaked ether (ETH).\nThe Arbitrum Security Council has taken emergency action to freeze the 30,766 ETH being held in the address on Arbitrum One that is connected to the KelpDAO exploit. The Security Council acted with input from law enforcement as to the exploiter\u2019s identity, and, at all times,\u2026\n\u2014\u2026"
+        }
+      ]
+    }
+  },
+  "economic_calendar": [
+    {
+      "title": "Core Retail Sales m/m",
+      "country": "USD",
+      "currency": null,
+      "date_utc": "2026-04-21T12:30:00+00:00",
+      "impact": "high",
+      "forecast": "1.4%",
+      "previous": "0.5%"
+    },
+    {
+      "title": "Retail Sales m/m",
+      "country": "USD",
+      "currency": null,
+      "date_utc": "2026-04-21T12:30:00+00:00",
+      "impact": "high",
+      "forecast": "1.4%",
+      "previous": "0.6%"
+    },
+    {
+      "title": "President Trump Speaks",
+      "country": "USD",
+      "currency": null,
+      "date_utc": "2026-04-21T12:30:00+00:00",
+      "impact": "medium",
+      "forecast": null,
+      "previous": null
+    },
+    {
+      "title": "Fed Chairman-Designate Warsh Testifies",
+      "country": "USD",
+      "currency": null,
+      "date_utc": "2026-04-21T14:00:00+00:00",
+      "impact": "high",
+      "forecast": null,
+      "previous": null
+    },
+    {
+      "title": "Pending Home Sales m/m",
+      "country": "USD",
+      "currency": null,
+      "date_utc": "2026-04-21T14:00:00+00:00",
+      "impact": "medium",
+      "forecast": "0.0%",
+      "previous": "1.8%"
+    },
+    {
+      "title": "CPI y/y",
+      "country": "GBP",
+      "currency": null,
+      "date_utc": "2026-04-22T06:00:00+00:00",
+      "impact": "high",
+      "forecast": "3.3%",
+      "previous": "3.0%"
+    },
+    {
+      "title": "ECB President Lagarde Speaks",
+      "country": "EUR",
+      "currency": null,
+      "date_utc": "2026-04-22T17:30:00+00:00",
+      "impact": "medium",
+      "forecast": null,
+      "previous": null
+    },
+    {
+      "title": "French Flash Manufacturing PMI",
+      "country": "EUR",
+      "currency": null,
+      "date_utc": "2026-04-23T07:15:00+00:00",
+      "impact": "medium",
+      "forecast": "49.5",
+      "previous": "50.2"
+    },
+    {
+      "title": "French Flash Services PMI",
+      "country": "EUR",
+      "currency": null,
+      "date_utc": "2026-04-23T07:15:00+00:00",
+      "impact": "medium",
+      "forecast": "48.5",
+      "previous": "48.3"
+    },
+    {
+      "title": "German Flash Manufacturing PMI",
+      "country": "EUR",
+      "currency": null,
+      "date_utc": "2026-04-23T07:30:00+00:00",
+      "impact": "high",
+      "forecast": "51.4",
+      "previous": "51.7"
+    },
+    {
+      "title": "German Flash Services PMI",
+      "country": "EUR",
+      "currency": null,
+      "date_utc": "2026-04-23T07:30:00+00:00",
+      "impact": "high",
+      "forecast": "50.4",
+      "previous": "51.2"
+    },
+    {
+      "title": "Flash Manufacturing PMI",
+      "country": "GBP",
+      "currency": null,
+      "date_utc": "2026-04-23T08:30:00+00:00",
+      "impact": "high",
+      "forecast": "50.3",
+      "previous": "51.4"
+    },
+    {
+      "title": "Flash Services PMI",
+      "country": "GBP",
+      "currency": null,
+      "date_utc": "2026-04-23T08:30:00+00:00",
+      "impact": "high",
+      "forecast": "50.0",
+      "previous": "51.2"
+    }
+  ],
+  "coverage_note": "News items are up to 5 per asset, last 48h. MARKETAUX is primary when the API key is set; CoinDesk + Cointelegraph RSS are crypto-wide feeds filtered per-asset by relevance_terms. Calendar holds next-48h events from Forex Factory; the analyst filters to USD high-impact in its Catalyst Gate."
+}
