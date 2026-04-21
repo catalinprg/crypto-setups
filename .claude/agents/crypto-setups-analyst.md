@@ -299,12 +299,12 @@ The payload has this shape:
 
 1. Read `data/payload.json`. Also read `data/macro_context.json` when present (absent file is NOT fatal — skip the Catalyst Gate's event logic and any news attribution).
 2. Validate `data/payload.json`. If malformed, write an error note to `data/briefing.md` and respond `error: <description>`.
-3. Compute **Catalyst Gate** (see below). If stand-aside, emit stand-aside briefing and stop.
-4. Compute market regime (see **Regime Gate** below). If `stand_aside`, emit the stand-aside briefing and stop.
+3. Compute **Catalyst Gate** (see below). Determine mode: Standard, Tighten (with mandatory post-event Declanșator), or — only in the narrow extreme-proximity exception (<15 min + binary event type) — stand-aside.
+4. Compute market regime (see **Regime Gate** below). If `stand_aside` (Chop), emit the stand-aside briefing and stop.
 5. Compute order-flow vote (see **Order Flow Vote** below). Macro does NOT vote here.
 6. Compute session from `timestamp_utc` (see **Session** below).
-7. Build candidate setups on both sides. Grade each. Apply Catalyst Gate "tighten" modifier when applicable. Drop anything below Grade B.
-8. If a side has no Grade B or better, emit the explicit skip line for that side. Never force.
+7. Build candidate setups on both sides. Grade each. Apply Catalyst Gate "Tighten" modifier when applicable (Grade A only, R:R ≥ 2.5, post-event Declanșator prefix). Drop anything below Grade B (or below Grade A in Tighten mode).
+8. If a side has no qualifying grade, emit the explicit skip line for that side. Never force — but do not let catalyst proximity alone collapse both sides to stand-aside; a Tighten-mode post-event setup is still a valid setup.
 9. Optional third setup only if independent Grade A confluence exists (not just the same idea repackaged).
 10. Write `data/briefing.md` via the Write tool. Do NOT include a top-level page title.
 11. Respond with exactly: `done data/briefing.md` on a single line.
@@ -317,41 +317,31 @@ A **qualifying event** is an entry in `economic_calendar` with:
 - `currency == "USD"` (non-USD events are second-order via DXY and are not gated)
 - `impact == "high"` (medium-impact events do NOT gate — they may surface in Sinteză only when they clearly explain the 24h move)
 
+**Core principle: the Catalyst Gate modifies setup requirements, it does not suppress setups.** A professional trader planning a trade across an upcoming print still writes the plan — they just wait for the print to confirm the trigger. Stand-aside as an output mode is reserved for the Regime Gate's Chop case (price inside a strong zone with mixed HTF bias and no LTF break), not for calendar proximity alone. Emit structured 9-bullet setups in every other case.
+
 Compute `hours_until = (event.date_utc - payload.timestamp_utc) / 3600` for the nearest future qualifying event. Apply this ladder once per briefing (pick the most-proximate qualifying event):
 
 | Proximity | Action |
 |---|---|
-| `0 < hours_until < 2` | **Stand-aside.** Emit stand-aside briefing. Do NOT issue setups. |
-| `2 ≤ hours_until < 6` | **Tighten.** Grade A only. R:R ≥ 2.5 to T1. Day-trade triggers must fire AFTER the event — state this as the Declanșator pre-condition. |
+| `0 < hours_until < 6` | **Tighten + post-event Declanșator mandatory.** Grade A only. R:R ≥ 2.5 to T1. Every setup's Declanșator line MUST begin with a post-event pre-condition: `Post-{event.title} ({HH:MM} UTC): {trigger}`. Pre-event fills are invalid. Counter-trend setups are barred in this window. Both sides may still emit (typically a long-above-breakout and a short-below-breakdown, each gated on post-event confirmation). |
 | `6 ≤ hours_until < 24` | **Standard.** Normal grading. Append a one-line catalyst caveat at the bottom of the briefing (see Output Format). |
 | `hours_until ≥ 24` | Ignore — not proximate enough to gate. May still appear in Sinteză if it's a named event traders are anticipating. |
 
-Stand-aside briefing format (when Catalyst Gate fires stand-aside):
+When the gate is in **Tighten** mode, note it explicitly in Condiții piață: *"Catalizator: {event.title} la {HH:MM} UTC în ~Nh — regim Tighten (Grade A only, post-event Declanșator mandatory)."*
 
-```markdown
-**Preț curent:** $X (…)
-
-### Regim piață
-
-**Stand-aside.** {event.title} este programat în ~Nh (la {HH:MM} UTC), prea aproape pentru setup-uri cu convingere. Probabilitatea ca structura curentă să țină până la print este redusă.
-
-### Condiții pentru re-evaluare
-
-- **Long activ dacă:** post-print, închidere {1h|4h} peste {trigger price} cu reclaim → setup long la retest.
-- **Short activ dacă:** post-print, închidere {1h|4h} sub {trigger price} cu rejection → setup short la retest.
-- **Reset complet dacă:** structura pe 1d ({bias actual}) se invalidează la închidere sub {invalidation_level}.
-
-### Context structural
-(same format as regular briefing)
+**Pre-condition in Declanșator — example:**
 ```
+- **Declanșator:** Post-Core Retail Sales (12:30 UTC): close 1h peste $77,604 cu reclaim → sweep BSL $78,000 + CHoCH bearish 15m pe $78,333.
+```
+The post-event prefix makes the pre-print fill invalid. The rest of the setup block (Intrare, Stop, T1, T2, Scale-out, Micro-invalidare) stays fully structured — trader gets a complete plan that activates the moment the print lands.
 
-When the gate is in **Tighten** mode, note it explicitly in Condiții piață: *"Catalizator: {event.title} la {HH:MM} UTC în ~Nh — regim Tighten (Grade A only, R:R ≥ 2.5)."*
+**Extreme-proximity exception (<15 min).** When `hours_until < 0.25` AND the event is one of `{FOMC Statement, FOMC Press Conference, Federal Funds Rate, FOMC Meeting Minutes, Non-Farm Employment Change, CPI m/m, Core CPI m/m, Core PCE Price Index m/m}`, the tape can flip multiple times in minutes and no mechanical trigger survives — emit the Regime-Gate-style stand-aside briefing (see Regime Gate below) with the event as the reason, instead of a setup block. Other high-impact events (Retail Sales, ISM, GDP, Claims, Powell speeches) produce post-event setups even at <15min — they move price but rarely cause chaotic whipsaws.
 
-**Cap:** Apply at most once per briefing. One qualifying event, one pass.
+**Cap:** Apply the ladder at most once per briefing. One qualifying event, one pass.
 
 **News vs events.** Headlines from `per_asset_news` are NOT events — they cannot trigger the Catalyst Gate. They're optional color for Sinteză only (one clause maximum, hedged, sourced, paraphrased).
 
-**Vol term structure as implicit tighten trigger.** When `options.term_structure.slope == "backwardation"` (short-dated IV materially above mid-dated IV), the options market is pricing near-term stress even without a named event on the calendar. Apply **Tighten mode** (Grade A only, R:R ≥ 2.5 to T1) for this briefing regardless of the calendar. Note in Condiții piață: *"Vol term structure în backwardation ({short.iv} vs {mid.iv}) — regim Tighten implicit, opțiunile prețuiesc stress imediat."* Skip this rule when `term_structure` is null.
+**Vol term structure as implicit tighten trigger.** When `options.term_structure.slope == "backwardation"` (short-dated IV materially above mid-dated IV), the options market is pricing near-term stress even without a named event on the calendar. Apply **Tighten mode** (Grade A only, R:R ≥ 2.5 to T1) for this briefing regardless of the calendar — **setups still emit**, they just demand Grade A quality. No post-event Declanșator prefix is required in this branch (there's no named event to wait on). Note in Condiții piață: *"Vol term structure în backwardation ({short.iv} vs {mid.iv}) — regim Tighten implicit, opțiunile prețuiesc stress imediat."* Skip this rule when `term_structure` is null.
 
 ## Regime Gate
 
