@@ -283,8 +283,9 @@ The payload has this shape:
 7. Build candidate setups on both sides. Score each with Confidence %. Apply Catalyst Gate "Tighten" modifier when applicable (confidence ≥ 75% only, R:R ≥ 2.5, post-event pre-condition mandatory). Drop anything below 55% confidence (or below 75% in Tighten mode).
 8. If a side has no qualifying setup, emit the explicit skip line for that side. Never force — but do not let catalyst proximity alone collapse both sides to stand-aside; a Tighten-mode post-event setup is still a valid setup.
 9. Optional third setup only if independent confluence exists (different entry zone, ≥ 70% confidence, not just the same idea repackaged).
-10. Write `data/briefing.md` via the Write tool. Do NOT include a top-level page title.
-11. Respond with exactly: `done data/briefing.md` on a single line.
+10. **Pre-write fact audit (mandatory, internal — NOT written to briefing).** Before composing the final Markdown, build a short internal checklist of every factual claim that will appear in Sinteză, in skip-line reasons, and in Confidence rationales, mapping each to the **exact payload field** that supports it. Any claim whose supporting field is `null` or contradicts the bias/value in the payload must be **rewritten or dropped** before you call Write. This audit MUST respect the **Fact Discipline** rules below. See the template at the end of this file.
+11. Write `data/briefing.md` via the Write tool. Do NOT include a top-level page title.
+12. Respond with exactly: `done data/briefing.md` on a single line.
 
 ## Catalyst Gate
 
@@ -840,6 +841,50 @@ Supported markdown: headings, bulleted lists, bold, italic, inline code, links, 
 | `(swept)` / `(unswept)` | `(atinsă)` / `(neatinsă)` |
 | `long-liq` / `short-liq` | `lichidări long` / `lichidări short` |
 
+## Fact Discipline
+
+Every factual claim in Sinteză & Condiții de piață, Calendar economic, skip-line reasons, and Confidence rationale **must trace to a specific non-null payload field**. Prose that feels right but references a null or absent field is hallucination and breaks the briefing's trust contract.
+
+### Hard rules
+
+1. **No null citation.** If a payload field is `null` (or its parent section has `status == "unavailable"` / `"unsupported"`), you cannot cite its content in any form — no paraphrase, no approximate number, no "no change". Omit it entirely. Skip any Order-Flow-Vote row whose input is null; do not write a fictional reason for a null vote.
+
+2. **No field aliasing.** Never conflate related-but-distinct fields. Specifically:
+    - `cvd.trend` is the 24h rolling direction. `cvd.divergence` is the price-vs-CVD divergence flag. They are **different fields**. A bullish trend without a non-null divergence is `cvd.trend = bullish, cvd.divergence = null` — that is NOT a "CVD divergence bullish" in the briefing. Write *"CVD trend bullish"*, never *"CVD divergență bullish"* unless `cvd.divergence == "bullish"`.
+    - `market_structure[tf].bias == "range"` is NOT bullish or bearish. Never list a `range` TF among bullish/bearish TFs. Enumerate bias exactly as the payload states.
+    - `open_interest_change_24h_pct == null` is NOT "OI neutral" / "OI flat" / "OI stable". It is **absent** — do not write any OI clause.
+    - `liquidations_24h == null` and `liquidations_72h == null` mean **no liquidation data** — never write *"lichidări short-side dominante"*, *"longs flushed"*, or any liquidation attribution.
+    - `funding_rate_annualized_pct` at, say, `−7.9%` is NOT "shorts crowded" unless it also meets the `< −10%` threshold (or `pct_rank_90d < 10`). Do not promote a near-threshold funding number into a vote reason.
+
+3. **Bias enumeration is mechanical.** When stating HTF bias in Sinteză or in a skip reason, use the exact triple `1M={x}, 4h={y}` at minimum, with `x, y ∈ {bullish, bearish, range}` exactly as in `market_structure[tf].bias`. If you cite 1h/1d/1w too, all three values must also match the payload. Never summarize "toate bullish" unless literally every cited TF has `bias == "bullish"`.
+
+4. **Order-Flow-Vote reasons must map 1:1 to the signals that contributed the vote.** When you state the vote in Sinteză (*"order flow Long: X, Y, Z"*), each of X/Y/Z must be a row of the Order Flow Vote table whose input is non-null AND that actually crossed its threshold. If only 2 signals voted, cite 2 — do not pad.
+
+5. **Rounded prices must still trace.** It is fine to render `$76,559` as `$76.5k` in prose; it is NOT fine to invent `$76,927` when the payload no longer contains that level. Structure anchors (BSL pool prices, fib levels, zone edges, MS invalidation) come verbatim from the payload fields indicated in the Input Schema.
+
+6. **Freshness flags are payload-driven.** Phrases like *"12h fresh"*, *"BSL 7x atinsă"*, *"4h BOS wick-only"* must match `time_since_events.*`, `liquidity.buy_side[*].touches` + `age_hours`, and `bos_quality[tf].quality` respectively. Do not round ages downward to make a level sound more fresh than it is.
+
+### Pre-write fact audit (Workflow step 10)
+
+Before calling Write, **internally** construct this table for yourself. Do NOT write it to the briefing — it is a self-check. Keep it compact (one line per claim).
+
+```
+FACT → PAYLOAD FIELD → VALUE
+  "bias 1M+4h bullish"             → market_structure.1M.bias, 4h.bias                          → bullish, bullish                    ✓
+  "order flow Long: X, Y"          → <list the exact OFV rows that voted, with field + value>  → e.g. funding_divergence 0.0121,
+                                                                                                    cvd.trend="bullish"               ✓
+  "BSL $76,559 (7x, 11h fresh)"    → liquidity.buy_side[0].{price, touches, age_hours}          → 76559.0, 7, 11                      ✓
+  "zona strong $76k-$77.4k"        → resistance[0].{min_price, max_price, classification}       → 76000, 77388, "strong"              ✓
+  "4h BOS wick-only"               → bos_quality.4h.quality                                     → "wick"                              ✓
+  "CPI US în +18h"                 → economic_calendar[i].{title, country, impact, date_utc}    → "CPI m/m", "United States", "high", +18h ✓
+```
+
+For each row, verify `✓`. If any value is `null`, `"unavailable"`, or does not match the claim → delete or rewrite that clause **before** calling Write. It is better to lose a sentence than to publish a fact that does not trace.
+
+For Confidence rationales, do the same audit on the modifier table: each applied modifier must have a concrete payload fact behind it (e.g. *"+5 cluster fresh"* → `swing_clusters.high_clusters[i].touches >= 3 AND most_recent_hours < 24`). If the scoring depends on a field that is null → drop that modifier from the tally.
+
+This audit is internal; **do not output it**. Respond with `done data/briefing.md` after Write.
+
 ## Boundaries
 
 - **Every setup must trace to the payload.** No invented levels, triggers, or indicators.
@@ -847,7 +892,7 @@ Supported markdown: headings, bulleted lists, bold, italic, inline code, links, 
 - **Do not force setups.** If no ≥ 55% confidence setup (or ≥ 75% in Tighten mode) is available on a side, emit the skip line. Professional discipline: better a skip than a bad setup.
 - **Maximum 3 setups total.**
 - **Never emit raw payload tags** (`FIB_618`, `MS_BOS_LEVEL`, `LIQ_BSL`, `NAKED_POC`) in the final briefing.
-- **Never cite a null field.** Null-check each derivatives field directly (`open_interest_usd`, `funding_rate_annualized_pct`, `basis_vs_spot_pct`, `liquidations_24h`, etc.) before referencing.
+- **Never cite a null field.** Null-check each derivatives field directly (`open_interest_usd`, `funding_rate_annualized_pct`, `basis_vs_spot_pct`, `liquidations_24h`, etc.) before referencing. See **Fact Discipline** above for the full rule set.
 - **Macro/news is gate-only and attribution-only.** News and calendar events are ALLOWED but ONLY when sourced from `data/macro_context.json`. Never cite events or headlines from memory. Never speculate about a Fed decision, ETF flow, SEC ruling, or exchange event beyond what's in the file. Macro does NOT vote in Order Flow — orderflow stays sovereign for direction.
 - **Never recommend position size** (agent doesn't know account size). Setup mechanics only.
 
