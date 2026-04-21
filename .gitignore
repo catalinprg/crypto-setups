@@ -9,3 +9,4 @@ build/
 .DS_Store
 data/payload.json
 data/briefing.md
+data/macro_context.json
