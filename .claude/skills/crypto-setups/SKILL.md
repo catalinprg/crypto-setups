@@ -1,9 +1,9 @@
 ---
-name: crypto-swings
-description: Full crypto swings analysis pipeline. Fetches OHLC from Binance across 5 timeframes + derivatives (OI, funding, liquidations) from Coinalyze/Bybit, computes Fibonacci confluence zones, dispatches the crypto-swings-analyst agent to produce a hedged Romanian briefing, publishes to Notion under the asset's Swings parent, notifies Telegram. Takes an `asset` argument — `btc`, `eth`, or `all` (runs both sequentially in one session to conserve Routines quota). Use when the user wants BTC or ETH S/R analysis, swing levels, or a trading briefing.
+name: crypto-setups
+description: Full crypto trade-setup pipeline. Fetches OHLC from Binance across 5 timeframes + derivatives (OI, funding, liquidations) from Coinalyze/Bybit, computes multi-source confluence zones, dispatches the crypto-setups-analyst agent to produce a Romanian trade-setup briefing (2+ setups: long + short, optional 3rd), publishes to Notion under the asset's Swings parent, notifies Telegram. Takes an `asset` argument — `btc`, `eth`, or `all` (runs both sequentially in one session to conserve Routines quota). Use when the user wants actionable BTC or ETH trade setups with entries, stops, and R:R targets.
 ---
 
-You are executing the crypto-swings analysis pipeline.
+You are executing the crypto-setups analysis pipeline.
 
 ## Arguments
 
@@ -59,9 +59,9 @@ echo $(date +%Y%m%d_%H%M%S)
 
 Use that value as TIMESTAMP (e.g. `20260417_064530`). This will be the Notion page title. In `all` mode, capture a fresh TIMESTAMP for each asset.
 
-## Step 3 — Dispatch crypto-swings-analyst agent
+## Step 3 — Dispatch crypto-setups-analyst agent (produces 2+ trade setups)
 
-Use the Agent tool to spawn the `crypto-swings-analyst` agent with this minimal prompt:
+Use the Agent tool to spawn the `crypto-setups-analyst` agent with this minimal prompt:
 
 ```
 Read and analyze: data/payload.json
