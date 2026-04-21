@@ -1,0 +1,239 @@
+{
+  "timestamp_utc": "2026-04-21T19:02:44Z",
+  "per_asset_news": {
+    "btc": {
+      "display": "BTC",
+      "relevance_terms": [
+        "Bitcoin",
+        "BTC",
+        "spot ETF",
+        "IBIT",
+        "FBTC",
+        "ARKB",
+        "GBTC",
+        "BlackRock",
+        "Fidelity",
+        "SEC",
+        "ETF flows",
+        "halving",
+        "miner",
+        "hashrate"
+      ],
+      "sources_used": [
+        "coindesk",
+        "cointelegraph"
+      ],
+      "items": [
+        {
+          "headline": "Bitcoin inflows to Binance fall to 2023 low as BTC bulls set target on $80K",
+          "source": "cointelegraph",
+          "published": "2026-04-21T18:00:00+00:00",
+          "url": "https://cointelegraph.com/news/bitcoin-inflows-to-binance-fall-to-2023-low-as-btc-bulls-set-target-on-dollar80k?utm_source=rss_feed&utm_medium=rss&utm_campaign=rss_partner_inbound",
+          "summary": "Bitcoin inflows diverge across exchanges as selling pressure eases on Binance, while Coinbase shows more dominant activity.",
+          "content": null
+        },
+        {
+          "headline": "Bitcoin slides toward $75,000 as Warsh says Trump didn't demand he cut rates",
+          "source": "coindesk",
+          "published": "2026-04-21T17:39:28+00:00",
+          "url": "https://www.coindesk.com/markets/2026/04/21/bitcoin-slides-toward-usd75-000-as-warsh-says-trump-didn-t-demand-he-cut-rates",
+          "summary": "Bitcoin slides toward $75,000 as Warsh says Trump didn't demand he cut rates",
+          "content": "Bitcoin slides toward $75,000 as Warsh says Trump didn't demand he cut rates\nThe S&P 500 and Nasdaq gave back their early morning gains alongside BTC as markets digested the Fed Chair nominee's Senate confirmation hearing.\nWhat to know:\n- Bitcoin and crypto stocks slipped Tuesday as Fed chair nominee Kevin Warsh stressed the central bank\u2019s independence from President Trump\u2019s calls for lower interest rates.\n- During the Senate Banking Committee hearing, Warsh said that Trump didn't demand he cut rates, and called digital assets part of the financial system\u2019s fabric.\n- 21shares' Matt Mena said Warsh would likely still favor lower rates over time, a shift that could boost liquidity and potentially help drive bitcoin prices back toward $100,000 in the second half of 2026.\nCrypto and crypto markets pulled back Tuesday as Federal Reserve chair nominee Kevin Warsh said U.S. President Donald Trump never demanded he cut rates when he takes the helm at the central bank.\nSpeaking before the Senate Banking Committee, Warsh emphasized the Federal Reserve's independence, pushing back on speculation about political pressure on rate decisions.\n\"I never said to the President where I think rates should be\u2026 and I wouldn\u2019t have even thought about doing so,\" Warsh said.\n\"The President never asked me to predetermine, commit, fix, decide on any interest rate decision in any of our discussions, nor would I ever agree to do so,\" he said. \"[Trump] never once asked me to commit to any particular\u2026"
+        },
+        {
+          "headline": "Bitcoin price rally 'in progress' but upside could be capped at $84K",
+          "source": "cointelegraph",
+          "published": "2026-04-21T16:55:37+00:00",
+          "url": "https://cointelegraph.com/news/bitcoin-price-rally-in-progress-but-upside-could-be-capped-at-84k?utm_source=rss_feed&utm_medium=rss&utm_campaign=rss_partner_inbound",
+          "summary": "Analysts say Bitcoin\u2019s rally has begun, but the upside may be capped at an average spot BTC ETF cost basis near $84,000.",
+          "content": "Market analysts said Bitcoin\u2019s (BTC) latest rally to $78,000 means that the \u201cuptrend has began,\u201d but the upside could be capped at $84,000, based on several key metrics.\nKey takeaways:\nBitcoin profitability metrics say that BTC has entered the early stages of a \u201creal rally.\u201d\nBTC price recovery may face stiff resistance at $84,000, with a pullback likely.\nBitcoin profitability suggests BTC rally \u201chas begun\u201d\nBitcoin\u2019s recent price recovery toward $76,000 has pushed it more than 26% above its sub-$60,000 multi-year low reached on Feb. 6.\nThis was accompanied by an increase in the Spent Output Profit Ratio (SOPR), which hit an eight-month high of 2.87, after dropping as low as 0.62 in early February.\nRelated: Bitcoin risks losing $70K as Strategy's STRC slips below $100\nSOPR is a metric used to show whether Bitcoin investors have made a profit or loss compared to when they first held Bitcoin. This ratio has historically marked the short-term bottom for BTC when it hits its lowest point.\n\u201cThe $BTC SOPR Ratio shows that $BTC has already broken out of the bottom and is rising,\u201d CryptoQuant analyst CW8900 said in a Tuesday post on X, adding:\n\u201cThe bottom for $BTC was formed last February. The rally is already in progress.\u201d\nSimilarly, Bitcoin\u2019s Net Unrealized Profit/Loss (NUPL), the difference between total profits and losses currently held by investors, has flipped positive for the first time since early January.\nThis suggests that the downtrend for Bitcoin has ended, and the \u201creal\u2026"
+        },
+        {
+          "headline": "Core Scientific plans $3.3B debt raise to fund AI data center push",
+          "source": "cointelegraph",
+          "published": "2026-04-21T16:50:38+00:00",
+          "url": "https://cointelegraph.com/news/core-scientific-3-3b-debt-ai-data-center-expansion?utm_source=rss_feed&utm_medium=rss&utm_campaign=rss_partner_inbound",
+          "summary": "The miner plans to refinance short-term debt and scale its US infrastructure as the broader industry pivots toward AI and high-performance computing.",
+          "content": "Core Scientific is seeking to raise $3.3 billion in debt to support its expanding data center operations across the United States, as crypto miners increasingly pivot toward high-performance computing and artificial intelligence workloads amid tighter conditions in the mining sector.\nThe financing will come through senior secured notes due in 2031, the company disclosed Tuesday. The notes will be backed by Core Scientific\u2019s assets, giving investors priority claims in the event of default. Unlike an equity raise, the offering allows the company to access capital without diluting existing shareholders.\nProceeds from the offering are expected to fund ongoing data center development and refinance existing short-term debt.\nIn particular, Core Scientific plans to repay borrowings under its 364-day credit facility, effectively extending its debt maturities as it scales infrastructure. The company has identified expansion projects in Georgia, Texas, North Carolina and Oklahoma.\nThe proposed raise follows a separate $1 billion credit agreement with Morgan Stanley announced in March, underscoring Core Scientific\u2019s push to secure long-term financing for its data center buildout.\nCore Scientific is among several crypto miners that have turned to leverage to expand beyond traditional bitcoin mining, particularly into high-performance computing and AI-focused data center services. Peers, including MARA Holdings, Riot Platforms and Hut 8 have pursued similar strategies, investing in\u2026"
+        },
+        {
+          "headline": "Bitcoin funding stays negative at $78K as short squeeze expectations grow",
+          "source": "cointelegraph",
+          "published": "2026-04-21T16:48:54+00:00",
+          "url": "https://cointelegraph.com/news/bitcoin-funding-stays-negative-78k-short-squeeze-expectations-grow?utm_source=rss_feed&utm_medium=rss&utm_campaign=rss_partner_inbound",
+          "summary": "BTC price action slowly headed upward but funding stayed negative, a unique occurrence that analysis said would result in a short squeeze.",
+          "content": "Bitcoin (BTC) sought to match ten-week highs on Tuesday as market participants bet on a new short squeeze.\nKey points:\nBitcoin is due a fresh short squeeze as funding rates uniquely stay negative as price grinds higher, say market pundits.\nShort-term targets include a trip to $85,000 in the coming weeks.\nBitcoin bulls still need to clear the nearby 21-week trend line keeping price pinned since October 2025.\n\u201cCannon is loaded\u201d for Bitcoin short squeeze\nData from TradingView showed BTC/USD approaching $77,000 for the first time this weekly candle.\nA slight comedown into the Wall Street open meant that price continued to coil below a large area of resistance.\nMixed signals over the US-Iran war continued on the day, with Iran denying that its delegations had arrived in Pakistan for a new round of negotiations with the US. As Cointelegraph reported, markets offered only a muted reaction to the latest closure of the Strait of Hormuz oil route.\nAmong Bitcoin traders, a sense of cautious optimism was slowly growing.\n\u201cA period of consolidation, but clearly upwards pattern,\u201d crypto trader Micha\u00ebl van de Poppe wrote in an X post.\n\u201cThis means that there's likely more upside to come for Bitcoin towards the $85,000 area.\u201d\nVan de Poppe gave a time frame of \u201ctwo to three weeks\u201d for that level to come into focus, reiterating earlier comments about Bitcoin\u2019s correlation with the Nasdaq.\nOthers focused on ongoing negative funding rates on exchanges, despite price rising.\n\u201cWe've never actually\u2026"
+        }
+      ]
+    },
+    "eth": {
+      "display": "ETH",
+      "relevance_terms": [
+        "Ethereum",
+        "ETH",
+        "Ether",
+        "spot ETH ETF",
+        "ETHA",
+        "ETHE",
+        "Vitalik",
+        "Buterin",
+        "staking",
+        "Lido",
+        "validator",
+        "Dencun",
+        "Pectra",
+        "L2",
+        "rollup",
+        "SEC"
+      ],
+      "sources_used": [
+        "coindesk",
+        "cointelegraph"
+      ],
+      "items": [
+        {
+          "headline": "Crypto's massive exploit may force big banks to rethink their blockchain plans, Jefferies warns",
+          "source": "coindesk",
+          "published": "2026-04-21T18:25:41+00:00",
+          "url": "https://www.coindesk.com/business/2026/04/21/crypto-s-massive-exploit-may-force-big-banks-to-rethink-their-blockchain-plans-jefferies-warns",
+          "summary": "Crypto's massive exploit may force big banks to rethink their blockchain plans, Jefferies warns",
+          "content": "Crypto's massive exploit may force big banks to rethink their blockchain plans, Jefferies warns\nThe $293 million Kelp DAO exploit has exposed critical infrastructure risks, leading Jefferies to suggest that traditional financial firms may pause their blockchain initiatives to prioritize security.\nWhat to know:\n- A $293 million exploit of Kelp DAO, linked to North Korea\u2019s Lazarus Group, has shaken DeFi markets and could prompt Wall Street firms to reassess the pace of their blockchain and tokenization projects.\n- The attack exposed critical vulnerabilities in cross-chain bridges and single-validator setups, leaving platforms like Aave with substantial bad debt and draining billions in total value locked from DeFi.\n- Jefferies says the hack may temporarily slow traditional finance tokenization efforts as firms review security risks, even as longer-term interest in digital assets and stablecoin-based payments continues to grow.\nA major decentralized finance (DeFi) hack could prompt Wall Street firms to reassess the pace of their blockchain and tokenization efforts, a Jefferies analyst wrote in a report.\nThe note follows a $293 million exploit of Kelp DAO on April 18, in which attackers minted unbacked tokens and used them as collateral to borrow other assets across lending platforms.\nThe incident, potentially linked to North Korea\u2019s Lazarus Group, has already rippled through crypto markets, triggering sharp token sell-offs and a liquidity crunch in key protocols.\nJefferies\u2026"
+        },
+        {
+          "headline": "Fed chair nominee pressed on potential conflicts of interest, independence",
+          "source": "cointelegraph",
+          "published": "2026-04-21T16:40:47+00:00",
+          "url": "https://cointelegraph.com/news/kevin-warsh-fed-hearing-conflicts-interest?utm_source=rss_feed&utm_medium=rss&utm_campaign=rss_partner_inbound",
+          "summary": "Kevin Warsh faced intense questions from Senator Elizabeth Warren and other lawmakers over his more than $100 million financial disclosure ahead of a confirmation hearing.",
+          "content": "[![Cointelegraph](https://cointelegraph.com/_duck/img/site-logo/en.svg)](https://cointelegraph.com/ \"Cointelegraph\")\n\nEcosystem\n\n[ETH$2,317 0.70%](https://cointelegraph.com/price-indexes/ethereum) [ADA$0.2485 0.98%](https://cointelegraph.com/price-indexes/ada) [BNB$633.21 0.90%](https://cointelegraph.com/price-indexes/binance-coin) [XLM$0.1782 4.65%](https://cointelegraph.com/price-indexes/stellar) [HYPE$39.87 2.54%](https://cointelegraph.com/price-indexes/hyperliquid) [XRP$1.43 0.63%](https://cointelegraph.com/price-indexes/xrp) [XMR$371.83 4.99%](https://cointelegraph.com/price-indexes/xmr) [SOL$86.09 0.83%](https://cointelegraph.com/price-indexes/solana) [LINK$9.40 1.97%](https://cointelegraph.com/price-indexes/chainlink) [TRX$0.3319 1.38%](https://cointelegraph.com/price-indexes/tron) [DOGE$0.09503 0.56%](https://cointelegraph.com/price-indexes/doge) [BCH$446.80 1.40%](https://cointelegraph.com/price-indexes/bitcoin-cash) [BTC$76,039 0.90%](https://cointelegraph.com/price-indexes/bitcoin)\n\n[ETH$2,317 0.70%](https://cointelegraph.com/price-indexes/ethereum) [ADA$0.2485 0.98%](https://cointelegraph.com/price-indexes/ada) [BNB$633.21 0.90%](https://cointelegraph.com/price-indexes/binance-coin) [XLM$0.1782 4.65%](https://cointelegraph.com/price-indexes/stellar) [HYPE$39.87 2.54%](https://cointelegraph.com/price-indexes/hyperliquid) [XRP$1.43 0.63%](https://cointelegraph.com/price-indexes/xrp) [XMR$371.83 4.99%](https://cointelegraph.com/price-indexes/xmr) [SOL$86.09\u2026"
+        },
+        {
+          "headline": "Kelp DAO attacker moves $175M in Ether after exploit: Arkham",
+          "source": "cointelegraph",
+          "published": "2026-04-21T11:12:09+00:00",
+          "url": "https://cointelegraph.com/news/kelp-exploiter-moves-175m-stolen-funds?utm_source=rss_feed&utm_medium=rss&utm_campaign=rss_partner_inbound",
+          "summary": "The Kelp DAO attacker has moved $175 million of stolen Ether in an apparent bid to start laundering it after the $290 million exploit.",
+          "content": "[![Cointelegraph](https://cointelegraph.com/_duck/img/site-logo/en.svg)](https://cointelegraph.com/ \"Cointelegraph\")\n\nEcosystem\n\n[XMR$375.87 6.64%](https://cointelegraph.com/price-indexes/xmr) [HYPE$40.81 1.13%](https://cointelegraph.com/price-indexes/hyperliquid) [DOGE$0.09537 0.77%](https://cointelegraph.com/price-indexes/doge) [TRX$0.3289 0.06%](https://cointelegraph.com/price-indexes/tron) [XRP$1.43 1.63%](https://cointelegraph.com/price-indexes/xrp) [ETH$2,319 0.36%](https://cointelegraph.com/price-indexes/ethereum) [SOL$85.88 0.89%](https://cointelegraph.com/price-indexes/solana) [BCH$445.20 0.88%](https://cointelegraph.com/price-indexes/bitcoin-cash) [BNB$634.11 1.31%](https://cointelegraph.com/price-indexes/binance-coin) [LINK$9.41 2.05%](https://cointelegraph.com/price-indexes/chainlink) [BTC$76,378 1.54%](https://cointelegraph.com/price-indexes/bitcoin) [XLM$0.1807 6.94%](https://cointelegraph.com/price-indexes/stellar) [ADA$0.2501 1.43%](https://cointelegraph.com/price-indexes/ada)\n\n[XMR$375.87 6.64%](https://cointelegraph.com/price-indexes/xmr) [HYPE$40.81 1.13%](https://cointelegraph.com/price-indexes/hyperliquid) [DOGE$0.09537 0.77%](https://cointelegraph.com/price-indexes/doge) [TRX$0.3289 0.06%](https://cointelegraph.com/price-indexes/tron) [XRP$1.43 1.63%](https://cointelegraph.com/price-indexes/xrp) [ETH$2,319 0.36%](https://cointelegraph.com/price-indexes/ethereum) [SOL$85.88 0.89%](https://cointelegraph.com/price-indexes/solana) [BCH$445.20\u2026"
+        },
+        {
+          "headline": "Philippines SEC flags dYdX, six crypto platforms as unauthorized",
+          "source": "cointelegraph",
+          "published": "2026-04-21T09:22:30+00:00",
+          "url": "https://cointelegraph.com/news/philippines-sec-warns-dydx-crypto-platforms-investor-alert?utm_source=rss_feed&utm_medium=rss&utm_campaign=rss_partner_inbound",
+          "summary": "Promoters of flagged platforms may face fines of up to 5 million Philippine pesos ($89,000) or up to 21 years in prison under Philippine securities law.",
+          "content": "[![Cointelegraph](https://cointelegraph.com/_duck/img/site-logo/en.svg)](https://cointelegraph.com/ \"Cointelegraph\")\n\nEcosystem\n\n[TRX$0.3285 0.44%](https://cointelegraph.com/price-indexes/tron) [LINK$9.42 1.69%](https://cointelegraph.com/price-indexes/chainlink) [XLM$0.1805 6.43%](https://cointelegraph.com/price-indexes/stellar) [HYPE$40.88 0.58%](https://cointelegraph.com/price-indexes/hyperliquid) [BTC$76,291 1.56%](https://cointelegraph.com/price-indexes/bitcoin) [XMR$365.50 3.46%](https://cointelegraph.com/price-indexes/xmr) [ETH$2,324 0.56%](https://cointelegraph.com/price-indexes/ethereum) [SOL$85.75 0.77%](https://cointelegraph.com/price-indexes/solana) [DOGE$0.09563 1.09%](https://cointelegraph.com/price-indexes/doge) [ADA$0.2508 1.42%](https://cointelegraph.com/price-indexes/ada) [BCH$443.55 0.45%](https://cointelegraph.com/price-indexes/bitcoin-cash) [BNB$636.56 1.58%](https://cointelegraph.com/price-indexes/binance-coin) [XRP$1.44 1.49%](https://cointelegraph.com/price-indexes/xrp)\n\n[TRX$0.3285 0.44%](https://cointelegraph.com/price-indexes/tron) [LINK$9.42 1.69%](https://cointelegraph.com/price-indexes/chainlink) [XLM$0.1805 6.43%](https://cointelegraph.com/price-indexes/stellar) [HYPE$40.88 0.58%](https://cointelegraph.com/price-indexes/hyperliquid) [BTC$76,291 1.56%](https://cointelegraph.com/price-indexes/bitcoin) [XMR$365.50 3.46%](https://cointelegraph.com/price-indexes/xmr) [ETH$2,324 0.56%](https://cointelegraph.com/price-indexes/ethereum) [SOL$85.75\u2026"
+        },
+        {
+          "headline": "European banks tap Fireblocks for MiCA-compliant euro stablecoin",
+          "source": "cointelegraph",
+          "published": "2026-04-21T08:01:03+00:00",
+          "url": "https://cointelegraph.com/news/european-banks-tap-fireblocks-for-mica-compliant-euro-stablecoin?utm_source=rss_feed&utm_medium=rss&utm_campaign=rss_partner_inbound",
+          "summary": "A 12-bank European consortium led by Qivalis is partnering with Fireblocks to develop a regulated euro stablecoin under MiCA, targeting launch in the second half of 2026.",
+          "content": "A consortium of 12 European banks led by Qivalis has selected digital asset custody provider Fireblocks to provide infrastructure for a Markets in Crypto-Assets Regulation (MiCA)-compliant euro stablecoin, according to a Tuesday release shared with Cointelegraph.\nQivalis\u2019s stablecoin is intended to support institutional use cases such as settlement, treasury and tokenized assets. Fireblocks said it will provide tokenization technology, wallet infrastructure, custody, and other important tools and features to support compliance, such as identity verification and sanctions screening.\nQivalis, launched in 2025, is a Netherlands-based venture backed by major banks including BBVA, BNP Paribas, ING and UniCredit, which plans to issue a fully regulated, 1:1-backed euro token structured as an electronic money institution under Dutch supervision. The group says it is targeting a launch in the second half of 2026, subject to approval from the Dutch central bank, De Nederlandsche Bank, under the European Union\u2019s MiCA regulatory framework.\nEuropean banks push euro stablecoin to counter dollar dominance\nThe project comes as dollar-denominated stablecoins dominate the global stablecoin market. According to DeFiLlama data, the total global stablecoin market capitalization is around $320 billion, with roughly 99% of supply tied to the US dollar and only a small share denominated in euros.\nEuropean banks and policymakers are stepping up efforts to reduce reliance on dollar stablecoins in\u2026"
+        }
+      ]
+    }
+  },
+  "economic_calendar": [
+    {
+      "title": "CPI y/y",
+      "country": "GBP",
+      "currency": null,
+      "date_utc": "2026-04-22T06:00:00+00:00",
+      "impact": "high",
+      "forecast": "3.3%",
+      "previous": "3.0%"
+    },
+    {
+      "title": "ECB President Lagarde Speaks",
+      "country": "EUR",
+      "currency": null,
+      "date_utc": "2026-04-22T17:30:00+00:00",
+      "impact": "medium",
+      "forecast": null,
+      "previous": null
+    },
+    {
+      "title": "French Flash Manufacturing PMI",
+      "country": "EUR",
+      "currency": null,
+      "date_utc": "2026-04-23T07:15:00+00:00",
+      "impact": "medium",
+      "forecast": "49.5",
+      "previous": "50.2"
+    },
+    {
+      "title": "French Flash Services PMI",
+      "country": "EUR",
+      "currency": null,
+      "date_utc": "2026-04-23T07:15:00+00:00",
+      "impact": "medium",
+      "forecast": "48.5",
+      "previous": "48.3"
+    },
+    {
+      "title": "German Flash Manufacturing PMI",
+      "country": "EUR",
+      "currency": null,
+      "date_utc": "2026-04-23T07:30:00+00:00",
+      "impact": "high",
+      "forecast": "51.4",
+      "previous": "51.7"
+    },
+    {
+      "title": "German Flash Services PMI",
+      "country": "EUR",
+      "currency": null,
+      "date_utc": "2026-04-23T07:30:00+00:00",
+      "impact": "high",
+      "forecast": "50.4",
+      "previous": "51.2"
+    },
+    {
+      "title": "Flash Manufacturing PMI",
+      "country": "GBP",
+      "currency": null,
+      "date_utc": "2026-04-23T08:30:00+00:00",
+      "impact": "high",
+      "forecast": "50.3",
+      "previous": "51.4"
+    },
+    {
+      "title": "Flash Services PMI",
+      "country": "GBP",
+      "currency": null,
+      "date_utc": "2026-04-23T08:30:00+00:00",
+      "impact": "high",
+      "forecast": "50.0",
+      "previous": "51.2"
+    },
+    {
+      "title": "Unemployment Claims",
+      "country": "USD",
+      "currency": null,
+      "date_utc": "2026-04-23T12:30:00+00:00",
+      "impact": "medium",
+      "forecast": "211K",
+      "previous": "207K"
+    },
+    {
+      "title": "Flash Manufacturing PMI",
+      "country": "USD",
+      "currency": null,
+      "date_utc": "2026-04-23T13:45:00+00:00",
+      "impact": "medium",
+      "forecast": "52.5",
+      "previous": "52.4"
+    },
+    {
+      "title": "Flash Services PMI",
+      "country": "USD",
+      "currency": null,
+      "date_utc": "2026-04-23T13:45:00+00:00",
+      "impact": "medium",
+      "forecast": "50.5",
+      "previous": "51.1"
+    }
+  ],
+  "coverage_note": "News items are up to 5 per asset, last 48h. MARKETAUX is primary when the API key is set; CoinDesk + Cointelegraph RSS are crypto-wide feeds filtered per-asset by relevance_terms. Calendar holds next-48h events from Forex Factory; the analyst filters to USD high-impact in its Catalyst Gate."
+}
