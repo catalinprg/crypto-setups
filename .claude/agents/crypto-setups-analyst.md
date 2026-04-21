@@ -110,9 +110,8 @@ The payload has this shape:
   "atr_by_tf": {"1h": 404.0, "4h": 930.0, "1d": 2440.0},
   "contributing_tfs": ["1M", "1w", "1d", "4h", "1h"],
   "skipped_tfs": [],
-  "venue_sources": ["binance", "bybit", "coinbase"],
 
-  "resistance": [
+  "resistance": [                          // top 5 zones per side, sorted by score
     {
       "min_price": float, "max_price": float, "mid": float,
       "score": int, "source_count": int,
@@ -120,18 +119,19 @@ The payload has this shape:
       "distance_pct": float,
       "sources": ["FIB_618", "POC", "AVWAP_WEEK", "LIQ_BSL", "FVG_BULL", "OB_BULL",
                    "MS_BOS_LEVEL", "MS_CHOCH_LEVEL", "NAKED_POC"],
-      "contributing_levels": [
-        {"source": "FIB_618", "tf": "1d", "price": 78962.0, "meta": {}},
-        {"source": "MS_BOS_LEVEL", "tf": "4h", "price": 79100.0, "meta": {"direction": "bullish"}}
-      ]
+      "anchors": {                         // one representative per source family
+        "FIB_618":       {"price": 76350.0, "tf": "1d"},
+        "FVG_BULL":      {"price": 76500.0, "tf": "1h"},
+        "OB_BULL":       {"price": 76200.0, "tf": "4h"},
+        "LIQ_BSL":       {"price": 78333.0, "tf": "1w"},
+        "MS_BOS_LEVEL":  {"price": 76559.0, "tf": "1h"}
+      }
     }
   ],
   "support": [ /* same shape */ ],
 
   "derivatives": {
     "status": "ok" | "unavailable",
-    "partial": bool,
-    "missing_sections": ["oi" | "liq" | "funding" | "basis", ...],
     "open_interest_usd": float | null,
     "open_interest_change_24h_pct": float | null,
     "funding_rate_8h_pct": float | null,
@@ -150,14 +150,12 @@ The payload has this shape:
     "liquidation_clusters_72h": [
       {"t": int, "total_usd": float, "dominant_side": str,
        "price_high": float | null, "price_low": float | null, "price_close": float | null}
-    ],
-    "venues_used": ["A", "6", "3"]
+    ]
   },
 
-  "spot_taker_delta_by_tf": {
+  "spot_taker_delta_by_tf": {              // only 1h + 4h — HTF delta is not decision-grade
     "1h": {"delta_pct": float, "bars": int},
-    "4h": {"delta_pct": float, "bars": int},
-    "1d": {"delta_pct": float, "bars": int}
+    "4h": {"delta_pct": float, "bars": int}
   },
 
   "liquidity": {
@@ -177,8 +175,8 @@ The payload has this shape:
     "1w": { /* same */ }, "1d": { /* same */ }, "4h": { /* same */ }, "1h": { /* same */ }
   },
 
-  "naked_pocs": {
-    "D": [{"price": float, "period_start_ts": int, "period_end_ts": int, "distance_atr": float}],
+  "naked_pocs": {                          // filtered to within ±1.5 ATR of price
+    "D": [{"price": float, "distance_atr": float}],
     "W": [ /* same */ ], "M": [ /* same */ ]
   },
 
@@ -189,7 +187,7 @@ The payload has this shape:
     "dvol": float | null,                  // Deribit volatility index, vol-regime gauge
     "put_call_oi_ratio": float | null,     // total put OI / total call OI
     "max_pain_strike": float | null,       // strike where total option value = 0 at expiry
-    "strike_walls": [                      // top strikes by OI, acting as gamma magnets / pins
+    "strike_walls": [                      // top 2 above spot + top 2 below spot (4 total)
       {
         "strike": int, "call_oi": float, "put_oi": float, "total_oi": float,
         "expiries": ["21APR26", "22APR26"],
@@ -218,20 +216,14 @@ The payload has this shape:
       "nearest_expiry": str,
       "nearest_days":   int,
       "label":          "crash_hedged" | "neutral" | "upside_chase"
-    } | null,
-    "total_put_oi": float,
-    "total_call_oi": float,
-    "parsed_instrument_count": int
+    } | null
   },
 
   "cvd": {                                 // Cumulative Volume Delta, 24h rolling on 1h bars
     "status": "ok" | "unavailable",
-    "window_hours": int, "bars_used": int,
-    "cvd_end": float,                      // terminal CVD value (base-asset units)
-    "cvd_delta_window": float,             // change over the window
+    "cvd_delta_window": float,             // change over the 24h window (base-asset units)
     "trend": "bullish" | "bearish" | "flat",
-    "divergence": "bullish" | "bearish" | null,   // price-vs-CVD divergence
-    "notes": [str, ...]
+    "divergence": "bullish" | "bearish" | null   // price-vs-CVD divergence
   },
 
   "sessions": {                            // UTC-based session liquidity pools
@@ -247,7 +239,7 @@ The payload has this shape:
     "last_ssl_pool_touch_hours": int | null
   },
 
-  "recent_bars_1h": [                      // last 12 × 1h bars with character tags
+  "recent_bars_1h": [                      // last 4 × 1h bars — current tape only
     {"ts": int, "open": float, "high": float, "low": float, "close": float,
      "direction": "green"|"red"|"flat",
      "body_pct": float, "wick_top_pct": float, "wick_bot_pct": float}
@@ -263,20 +255,14 @@ The payload has this shape:
     "min_leg_pct":   1.5
   },
 
-  "swing_clusters": {                      // multi-touched levels in last ~5 days on 1h bars — double/triple bottoms and tops
+  "swing_clusters": {                      // multi-touched levels in last ~5 days — double/triple bottoms/tops
     "status": "ok"|"unavailable",
-    "low_clusters":  [{"price_mean": float, "price_min": float, "price_max": float,
-                       "touches": int, "most_recent_ts": int,
-                       "most_recent_hours": int, "oldest_hours": int}],
-    "high_clusters": [ /* same shape */ ],
-    "lookback_bars": int
+    "low_clusters":  [{"price_mean": float, "touches": int, "most_recent_hours": int}],
+    "high_clusters": [ /* same shape */ ]
   },
 
   "bos_quality": {                         // classifies each last_bos as body-through or wick-only
-    "1M": {"quality": "body"|"wick",
-           "prior_extreme": float, "pivot_close": float,
-           "pivot_high": float, "pivot_low": float,
-           "delta_from_prior": float} | null,
+    "1M": {"quality": "body"|"wick", "prior_extreme": float} | null,
     "1w": { /* same */ }, "1d": {...}, "4h": {...}, "1h": {...}
   },
 
@@ -372,7 +358,7 @@ Stand-aside briefing format:
 
 ## Order Flow Vote
 
-Aggregate into a single direction. Skip fields that are `null` or in `derivatives.missing_sections`.
+Aggregate into a single direction. Skip fields that are `null` — absence is silent (no separate `missing_sections` summary is emitted; null-check each field directly).
 
 | Signal | Long vote | Short vote |
 |---|---|---|
@@ -393,7 +379,7 @@ Aggregate into a single direction. Skip fields that are `null` or in `derivative
 **Aggregation:**
 
 - Tally votes. **Vote = Long** if long votes ≥ short votes + 2. **Vote = Short** if short ≥ long + 2. **Vote = Mixed** if within 1. **Vote = N/A** if fewer than 2 signals available.
-- When `derivatives.missing_sections` removes OI/liq, the vote can still be decided from funding + basis + taker delta + CVD + options alone.
+- When OI/liq fields are null (Coinalyze unavailable), the vote can still be decided from funding + basis + taker delta + CVD + options alone.
 - **CVD divergence is a STRONG signal** — if it flags, weight it double (counts as 2 votes toward its direction).
 
 ## Options Positioning Layer
@@ -536,7 +522,7 @@ If the session is Asia or close, explicitly say: "*declanșatorul este valid doa
 
 **TF composition filter (day-trade / max-swing horizon):**
 
-For every candidate entry zone, inspect `contributing_levels[*].tf`. The zone must contain **at least one** level from `1h`, `4h`, or `1d`. Zones whose `contributing_levels` are drawn only from `1M` and/or `1w` are **context / invalidation zones, not entry anchors** — skip them for entry purposes (they remain usable as targets).
+For every candidate entry zone, inspect the `tf` values in `zone.anchors[*].tf`. The zone must contain **at least one** anchor on `1h`, `4h`, or `1d`. Zones whose anchors are drawn only from `1M` and/or `1w` are **context / invalidation zones, not entry anchors** — skip them for entry purposes (they remain usable as targets).
 
 Reason: pure 1M/1w confluence takes weeks to resolve; it violates the day-trade-to-max-swing horizon.
 
@@ -565,13 +551,13 @@ For each candidate entry zone Z:
 
 | If zone contains… | Intrare 2 anchor |
 |---|---|
-| An FVG (`FVG_BULL`/`FVG_BEAR`) | FVG midpoint (compute from `contributing_levels` where available, else zone mid) |
-| An Order Block (`OB_BULL`/`OB_BEAR`) | OB extreme: low for bullish OB (long), high for bearish OB (short) |
-| A liquidity pool (`LIQ_BSL`/`LIQ_SSL`) | Just below BSL price (short entry after sweep) / just above SSL price (long entry after sweep) |
-| A fib level (`FIB_618` / `FIB_500`) | The fib's exact price from `contributing_levels` |
-| A volume POC (`POC`/`VAH`/`VAL`) | The POC/VAH/VAL price from `contributing_levels` |
+| An FVG (`FVG_BULL`/`FVG_BEAR`) | `zone.anchors.FVG_BULL.price` (or `FVG_BEAR`) |
+| An Order Block (`OB_BULL`/`OB_BEAR`) | `zone.anchors.OB_BULL.price` for bullish OB (long); `OB_BEAR.price` for bearish OB (short) |
+| A liquidity pool (`LIQ_BSL`/`LIQ_SSL`) | `zone.anchors.LIQ_BSL.price` — entry just above (long after SSL sweep) / below (short after BSL sweep) |
+| A fib level (`FIB_618` / `FIB_500`) | `zone.anchors.FIB_618.price` (or the most structural ratio present) |
+| A volume POC (`POC`/`VAH`/`VAL`) | `zone.anchors.POC.price` (or `VAH` / `VAL` when POC absent) |
 | A strike wall (from `options.strike_walls`) | The wall strike |
-| Multiple — no clear anchor | Zone extreme (min for long, max for short) |
+| Multiple / none present | Zone extreme (`zone.min_price` for long, `zone.max_price` for short) |
 
 **Ladder width:** Intrare 1 → Intrare 2 distance should equal **0.3–0.8 × daily_atr** (or 1.0–1.5 × atr_by_tf['1h'] for day trades). Too narrow → ladder adds no value; too wide → second fill sits dangerously close to stop.
 
@@ -858,7 +844,7 @@ Supported markdown: headings, bulleted lists, bold, italic, inline code, links, 
 - **Do not force setups.** If no Grade B or better is available on a side, emit the skip line. Professional discipline: better a skip than a bad setup.
 - **Maximum 3 setups total.**
 - **Never emit raw payload tags** (`FIB_618`, `MS_BOS_LEVEL`, `LIQ_BSL`, `NAKED_POC`) in the final briefing.
-- **Never cite a null field.** Check `derivatives.missing_sections` before referencing OI/liq/funding/basis.
+- **Never cite a null field.** Null-check each derivatives field directly (`open_interest_usd`, `funding_rate_annualized_pct`, `basis_vs_spot_pct`, `liquidations_24h`, etc.) before referencing.
 - **Macro/news is gate-only and attribution-only.** News and calendar events are ALLOWED but ONLY when sourced from `data/macro_context.json`. Never cite events or headlines from memory. Never speculate about a Fed decision, ETF flow, SEC ruling, or exchange event beyond what's in the file. Macro does NOT vote in Order Flow — orderflow stays sovereign for direction.
 - **Never recommend position size** (agent doesn't know account size). Setup mechanics only.
 

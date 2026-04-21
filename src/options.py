@@ -130,7 +130,8 @@ def _compute_max_pain(rows: list[dict]) -> float | None:
 
 
 def _compute_strike_walls(
-    summaries: list[dict], expiry_limit: int = ACTIVE_EXPIRY_LIMIT
+    summaries: list[dict], spot: float | None,
+    expiry_limit: int = ACTIVE_EXPIRY_LIMIT,
 ) -> list[dict]:
     """Identify strike walls — strikes with the highest OI concentration in
     the nearest N expiries. Strike walls act as gamma magnets/pins because
@@ -138,10 +139,10 @@ def _compute_strike_walls(
     expiry. This is the cleanest proxy for GEX concentration that we can
     compute without per-instrument greeks.
 
-    Returns up to 8 strikes with the most OI, sorted by strike price for
-    readability. Each entry carries call vs put OI so the analyst can tell
-    resistance walls (call-dominant above spot) from support walls
-    (put-dominant below spot)."""
+    Returns up to 4 strikes total — the top 2 by OI above spot (ceiling
+    candidates) and the top 2 below spot (floor candidates). Walls 5+ are
+    historically never cited in briefings; capping at 4 preserves the
+    signal without adding noise."""
     if not summaries:
         return []
 
@@ -180,7 +181,12 @@ def _compute_strike_walls(
         r["expiries"] = sorted(r["expiries"])
 
     rows.sort(key=lambda r: r["total_oi"], reverse=True)
-    top = rows[:8]
+    if spot is not None:
+        above = [r for r in rows if r["strike"] >= spot][:2]
+        below = [r for r in rows if r["strike"] <  spot][:2]
+        top = above + below
+    else:
+        top = rows[:4]
     top.sort(key=lambda r: r["strike"])
     return top
 
@@ -457,23 +463,22 @@ async def fetch_all(asset: str) -> dict:
     put_call_ratio = (total_put_oi / total_call_oi) if total_call_oi > 0 else None
 
     max_pain = _compute_max_pain(parsed)
-    strike_walls = _compute_strike_walls(parsed)
+    strike_walls = _compute_strike_walls(parsed, index_price)
     expected_moves = compute_expected_moves(index_price, dvol)
     term_structure = compute_term_structure(parsed, index_price)
     skew_25d = compute_skew(parsed, index_price)
 
+    # parsed_instrument_count + raw totals were diagnostic — put_call_oi_ratio
+    # carries the positioning signal; raw totals never drove a decision.
     return {
-        "status":                  "ok",
-        "currency":                ccy,
-        "index_price":             round(index_price, 2) if index_price else None,
-        "dvol":                    dvol,
-        "put_call_oi_ratio":       round(put_call_ratio, 3) if put_call_ratio else None,
-        "max_pain_strike":         max_pain,
-        "strike_walls":            strike_walls,
-        "expected_moves":          expected_moves,
-        "term_structure":          term_structure,
-        "skew_25d":                skew_25d,
-        "total_put_oi":            round(total_put_oi, 2),
-        "total_call_oi":           round(total_call_oi, 2),
-        "parsed_instrument_count": len(parsed),
+        "status":            "ok",
+        "currency":          ccy,
+        "index_price":       round(index_price, 2) if index_price else None,
+        "dvol":              dvol,
+        "put_call_oi_ratio": round(put_call_ratio, 3) if put_call_ratio else None,
+        "max_pain_strike":   max_pain,
+        "strike_walls":      strike_walls,
+        "expected_moves":    expected_moves,
+        "term_structure":    term_structure,
+        "skew_25d":          skew_25d,
     }

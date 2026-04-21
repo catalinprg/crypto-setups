@@ -24,7 +24,9 @@ from dataclasses import dataclass
 from src.types import OHLC
 
 
-RECENT_BARS_N = 12
+RECENT_BARS_N = 4  # last 4 × 1h bars cover the current tape narrative;
+                   # beyond that, bar-level context is historical noise the
+                   # chart already expressed via swings + clusters.
 SWING_CLUSTER_LOOKBACK_BARS = 120        # last ~5 days of 1h data
 SWING_CLUSTER_BAND_PCT = 0.5             # 0.5% price band to group touches
 MIN_BARS_BETWEEN_SWINGS = 6              # filter adjacent micro-swings
@@ -198,12 +200,8 @@ def recent_swing_clusters(h1_bars: list[OHLC]) -> dict:
             prices = [x[1] for x in c]
             out.append({
                 "price_mean":        round(sum(prices) / len(prices), 2),
-                "price_min":         round(min(prices), 2),
-                "price_max":         round(max(prices), 2),
                 "touches":           len(c),
-                "most_recent_ts":    max(ts_list),
                 "most_recent_hours": int((now_ms - max(ts_list)) / 3_600_000),
-                "oldest_hours":      int((now_ms - min(ts_list)) / 3_600_000),
             })
         out.sort(key=lambda c: c["touches"], reverse=True)
         return out[:5]
@@ -268,12 +266,11 @@ def classify_bos_quality(market_structure: dict, ohlc_by_tf: dict) -> dict:
         else:  # bearish
             prior_extreme = min(b.low for b in window)
             quality = "body" if pivot_bar.close < prior_extreme else "wick"
+        # pivot_high / pivot_low / delta_from_prior were never cited in
+        # briefings — the analyst uses quality (body|wick) + prior_extreme
+        # (the "real" resistance/support when wick-only) and no more.
         out[tf] = {
-            "quality":           quality,
-            "prior_extreme":     round(prior_extreme, 2),
-            "pivot_close":       round(pivot_bar.close, 2),
-            "pivot_high":        round(pivot_bar.high, 2),
-            "pivot_low":         round(pivot_bar.low, 2),
-            "delta_from_prior":  round(pivot_bar.close - prior_extreme, 2),
+            "quality":       quality,
+            "prior_extreme": round(prior_extreme, 2),
         }
     return out

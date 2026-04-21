@@ -30,12 +30,16 @@ from src.order_blocks import detect_order_blocks
 from src.market_structure import analyze_structure
 from src.levels import (
     cluster_levels, split_by_price, filter_sources_for_display,
+    extract_zone_anchors,
     fibs_to_levels, pools_to_levels, profile_to_levels, naked_pocs_to_levels,
     avwap_to_levels, fvgs_to_levels, obs_to_levels, structure_to_levels,
 )
 
 MAX_LEVEL_DISTANCE_PCT = 0.20   # drop far-away levels before clustering
-MAX_ZONES_PER_SIDE = 10         # cap payload size
+MAX_ZONES_PER_SIDE = 5          # analyst only acts on the top 3-4 per side;
+                                # zones 5+ are distant context, never drive
+                                # grading. Capping at 5 halves zone payload
+                                # while keeping one fallback zone in reserve.
 
 
 async def _aggregated_per_tf(symbol: str, binance_ohlc: dict) -> tuple[dict, list[str]]:
@@ -197,6 +201,10 @@ async def build() -> dict:
     change_24h_pct = (current_price - prev_close) / prev_close * 100
 
     def z_to_dict(z):
+        # `contributing_levels` (raw level list, ~30 entries per zone) is
+        # replaced by `anchors` — one representative {price, tf} per source
+        # family. Preserves Intrare 2 anchor selection and the TF-composition
+        # filter while cutting ~95% of the per-zone byte footprint.
         return {
             "min_price": round(z.min_price, 2),
             "max_price": round(z.max_price, 2),
@@ -206,11 +214,7 @@ async def build() -> dict:
             "classification": z.classification,
             "distance_pct": round((z.mid - current_price) / current_price * 100, 2),
             "sources": filter_sources_for_display(z.levels),
-            "contributing_levels": sorted(
-                [{"source": l.source, "tf": l.tf, "price": round(l.price, 2), "meta": l.meta}
-                 for l in z.levels],
-                key=lambda d: d["price"],
-            ),
+            "anchors": extract_zone_anchors(z.levels),
         }
 
     if deriv.get("status") == "ok" and deriv.get("liquidation_clusters_72h"):
@@ -233,7 +237,7 @@ async def build() -> dict:
 
     # Chart-visual context: recent 1h bars, current leg vs swing extremes,
     # recent tested levels (double/triple bottoms), BOS wick vs body quality.
-    recent_bars_block = recent_action_mod.recent_bars(h1_bars, n=12)
+    recent_bars_block = recent_action_mod.recent_bars(h1_bars)
     current_leg_block = recent_action_mod.current_leg(h1_bars, current_price)
     swing_clusters_block = recent_action_mod.recent_swing_clusters(h1_bars)
     ms_serializable = {
@@ -263,7 +267,13 @@ async def build() -> dict:
         "current_leg": current_leg_block,
         "swing_clusters": swing_clusters_block,
         "bos_quality": bos_quality_block,
-        "spot_taker_delta_by_tf": taker_delta_per_tf(ohlc),
+        # Restrict to 1h + 4h — these are the TFs the Order-Flow-Vote uses.
+        # 1M/1w taker delta was computed but never cited; dropping avoids
+        # tempting the agent to include it as decoration.
+        "spot_taker_delta_by_tf": {
+            tf: v for tf, v in taker_delta_per_tf(ohlc).items()
+            if tf in ("1h", "4h")
+        },
         "liquidity": liquidity_pools,
         "market_structure": {
             tf: {
@@ -274,20 +284,19 @@ async def build() -> dict:
             }
             for tf, ms in ms_by_tf.items()
         },
+        # Keep only naked POCs within ±1.5 ATR of current price. Distant POCs
+        # (>1.5 ATR away) never become day-trade or swing targets on this
+        # horizon; they're structural artifacts the agent otherwise pattern-
+        # matches into every briefing.
         "naked_pocs": {
             period: [
-                {
-                    "price": round(p.price, 2),
-                    "period_start_ts": p.period_start_ts,
-                    "period_end_ts": p.period_end_ts,
-                    "distance_atr": round(p.distance_atr, 2),
-                }
-                for p in lst if p.is_naked
+                {"price": round(p.price, 2), "distance_atr": round(p.distance_atr, 2)}
+                for p in lst
+                if p.is_naked and abs(p.distance_atr) <= 1.5
             ]
             for period, lst in naked_pocs.items()
         },
         "eth_btc_context": eth_btc_block,
-        "venue_sources": venues_used,
     }
 
 

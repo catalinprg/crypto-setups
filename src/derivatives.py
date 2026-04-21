@@ -290,10 +290,10 @@ def build_derivatives_payload(
         funding_hyperliquid.get("annualized_pct"), hl_funding_history or [],
     )
 
+    # `missing_sections`, `partial`, `venues_used` were diagnostic — the
+    # analyst null-checks each field directly, never cites these summaries.
     return {
         "status": "ok",
-        "partial": bool(missing),
-        "missing_sections": missing,
         "open_interest_usd": oi_total,
         "open_interest_change_24h_pct": oi_change,
         "funding_rate_8h_pct": funding["rate_8h_pct"],
@@ -310,7 +310,6 @@ def build_derivatives_payload(
         "liquidations_24h": liq_24h,
         "liquidations_72h": liq_72h,
         "liquidation_clusters_72h": clusters,
-        "venues_used": oi_venues,
     }
 
 

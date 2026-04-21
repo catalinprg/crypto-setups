@@ -81,6 +81,48 @@ MAX_AVWAP_TAGS_SHOWN = 2
 MAX_FIB_TAGS_PER_TF = 2
 
 
+ANCHOR_SOURCES = frozenset({
+    # Price-action anchors for Intrare 2 deep-entry selection.
+    "FVG_BULL", "FVG_BEAR", "OB_BULL", "OB_BEAR",
+    "FIB_236", "FIB_382", "FIB_500", "FIB_618", "FIB_786",
+    "FIB_1272", "FIB_1618",
+    "LIQ_BSL", "LIQ_SSL",
+    "POC", "VAH", "VAL",
+    "AVWAP_SESSION", "AVWAP_SWING_HH", "AVWAP_SWING_LL",
+    "AVWAP_WEEK", "AVWAP_MONTH", "AVWAP_EVENT",
+    # Structure BOS/CHoCH levels — agent cites the break-of-structure
+    # price as a setup trigger ("close 1h peste {MS_BOS_LEVEL}").
+    "MS_BOS_LEVEL", "MS_CHOCH_LEVEL",
+})
+
+
+def extract_zone_anchors(levels: Iterable) -> dict:
+    """Per-zone representative anchor prices, one entry per source family.
+
+    Replaces the raw `contributing_levels` list (up to 30 entries per zone —
+    most of them duplicates across TFs and venues). The agent consumes two
+    things from per-zone level data: (a) the Intrare 2 anchor price for each
+    source family present in the zone, (b) the set of TFs present (for the
+    horizon filter that requires ≥1 level from 1h/4h/1d).
+
+    Both are satisfied by emitting, per zone, a dict keyed by source tag
+    with the median-priced level's {price, tf}. Median — not first — so a
+    2-entry family doesn't bias the anchor toward either edge, and a 3+
+    entry cluster gets its structural midpoint.
+    """
+    by_source: dict[str, list] = {}
+    for lvl in levels:
+        if lvl.source in ANCHOR_SOURCES:
+            by_source.setdefault(lvl.source, []).append(lvl)
+
+    out: dict[str, dict] = {}
+    for src, group in by_source.items():
+        group.sort(key=lambda l: l.price)
+        representative = group[len(group) // 2]
+        out[src] = {"price": round(representative.price, 2), "tf": representative.tf}
+    return out
+
+
 def filter_sources_for_display(levels: Iterable) -> list[str]:
     """Collapse noisy source lists for the payload.
 

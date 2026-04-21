@@ -125,13 +125,11 @@ def compute_cvd_snapshot(h1_bars: list[OHLC], window_hours: int = ROLLING_HOURS)
             divergence = "bullish"
             notes.append("price LL, cvd HL")
 
+    # window_hours / bars_used / notes were diagnostic; the agent grades on
+    # trend + divergence and optionally cites cvd_delta_window for magnitude.
     return {
-        "status":              "ok",
-        "window_hours":        len(window),
-        "bars_used":           len(window),
-        "cvd_end":             round(cvd_end, 2),
-        "cvd_delta_window":    round(cvd_delta, 2),
-        "trend":               cvd_trend,
-        "divergence":          divergence,
-        "notes":               notes,
+        "status":           "ok",
+        "cvd_delta_window": round(cvd_delta, 2),
+        "trend":            cvd_trend,
+        "divergence":       divergence,
     }
