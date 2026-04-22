@@ -14,6 +14,7 @@ from src import options as options_mod
 from src import sessions as sessions_mod
 from src import cvd as cvd_mod
 from src import recent_action as recent_action_mod
+from src import tickets as tickets_mod
 from src.config import CONFIG
 from src.fetch import fetch_all, taker_delta_per_tf
 from src.venue_aggregator import fetch_all_venues, aggregate_bars
@@ -246,6 +247,34 @@ async def build() -> dict:
     }
     bos_quality_block = recent_action_mod.classify_bos_quality(ms_serializable, ohlc)
 
+    # --- Persistent ticket ledger: evaluate every non-terminal ticket from
+    # prior runs against fresh bars, then embed (active, resolved_this_run)
+    # in the payload for the analyst to surface at the top of the briefing.
+    # Bars are converted OHLC→dict so the ticket module stays pure-data.
+    def _ohlc_to_dicts(bars: list) -> list[dict]:
+        return [
+            {"ts": b.ts, "open": b.open, "high": b.high, "low": b.low, "close": b.close}
+            for b in (bars or [])
+        ]
+    bars_for_tickets = {
+        "1h": _ohlc_to_dicts(ohlc.get("1h") or []),
+        "4h": _ohlc_to_dicts(ohlc.get("4h") or []),
+        "1d": _ohlc_to_dicts(ohlc.get("1d") or []),
+    }
+    try:
+        active_tickets, resolved_tickets = tickets_mod.run_ledger_cycle(
+            asset=CONFIG.asset,
+            now_utc=datetime.now(timezone.utc),
+            current_price=current_price,
+            bars_by_tf=bars_for_tickets,
+        )
+    except Exception as e:
+        # Ticket evaluation must never block the briefing. On any failure,
+        # emit empty blocks and let the analyst proceed with a degraded
+        # ledger banner — same discipline as the macro fetch.
+        print(f"ticket ledger eval failed (non-fatal): {e}", file=sys.stderr)
+        active_tickets, resolved_tickets = [], []
+
     return {
         "asset": CONFIG.asset,
         "display_name": CONFIG.display_name,
@@ -297,6 +326,8 @@ async def build() -> dict:
             for period, lst in naked_pocs.items()
         },
         "eth_btc_context": eth_btc_block,
+        "active_tickets": active_tickets,
+        "resolved_tickets": resolved_tickets,
     }
 
 

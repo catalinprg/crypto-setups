@@ -76,16 +76,31 @@ Use the Agent tool to spawn the `crypto-setups-analyst` agent with this minimal 
 Read and analyze: data/payload.json
 Also read (if present): data/macro_context.json
 
-Write your complete briefing as Markdown to data/briefing.md using the Write tool. Do not include a top-level page title — the publisher sets it. After the file is saved, respond with exactly: done data/briefing.md
+Write your complete briefing as Markdown to data/briefing.md using the Write tool.
+Also write the structured ticket set as JSON to data/new_tickets.json (one object per new setup, per the agent's documented schema). If no new tickets were emitted this run, write {"asset": "<asset>", "timestamp_utc": "<payload.timestamp_utc>", "tickets": []} — the file must exist unconditionally.
+Do not include a top-level page title in the Markdown — the publisher sets it.
+After both files are saved, respond with exactly: done data/briefing.md data/new_tickets.json
 ```
 
-That is the complete prompt. Do not add more context — the agent has its full instructions (role, Catalyst Gate, Regime Gate, Order Flow Vote, language rules, analysis framework, output format) embedded, and reads the asset identity from the payload's `asset` / `display_name` fields.
+That is the complete prompt. Do not add more context — the agent has its full instructions (role, Catalyst Gate, Regime Gate, Order Flow Vote, ticket-ledger rendering, language rules, analysis framework, output format, new_tickets.json schema) embedded, and reads the asset identity from the payload's `asset` / `display_name` fields.
 
-In `all` mode, the agent overwrites `data/briefing.md` each time — this is expected. Step 4c must run immediately after the agent returns and before the next asset overwrites the file.
+In `all` mode, the agent overwrites `data/briefing.md` and `data/new_tickets.json` each time — this is expected. Steps 4c + 4d must run immediately after the agent returns and before the next asset overwrites those files.
 
 If the agent returns `error: ...`, record the failure and move on.
 
-### 4c. Publish to Notion
+### 4c. Extract new tickets into the persistent ledger
+
+```bash
+python3 -m scripts.extract_tickets data/new_tickets.json
+```
+
+Reads `data/new_tickets.json`, validates each ticket, mints an ID, and appends to `state/tickets_{asset}.jsonl` with `status: "armed"`.
+
+Non-fatal: if the file is missing or empty, the extractor logs to stderr and exits 0 (no tickets). If the `asset` field inside the file does not match `$ASSET`, the extractor exits 1 — this is a correctness error (cross-asset ledger contamination), record the failure and continue.
+
+This step runs BEFORE publish so the ledger is updated even if Notion is degraded.
+
+### 4d. Publish to Notion
 
 ```bash
 python3 publish_notion.py data/briefing.md TIMESTAMP
@@ -97,7 +112,7 @@ Required env: `NOTION_TOKEN`.
 
 On non-zero exit, capture stderr and record the failure.
 
-### 4d. Notify Telegram (non-fatal)
+### 4e. Notify Telegram (non-fatal)
 
 ```bash
 python3 notify_telegram.py "$(echo $ASSET | tr a-z A-Z) Swings briefing published $(date +%Y-%m-%d\ %H:%M)
@@ -108,7 +123,27 @@ Substitute `<notion_url>`. Required env: `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_I
 
 Idempotent: missing env → silent no-op; API failure → non-fatal.
 
-## Step 5 — Confirm
+## Step 5 — Commit + push the ticket ledger
+
+After every asset's Phase 2 completes (both in `all` mode and single-asset mode), commit the ledger so the next run sees the updated state. Run this ONCE at the end of the pipeline, not per-asset — a single commit covers both tickets_btc.jsonl and tickets_eth.jsonl when `all` ran both.
+
+```bash
+# Only commit if the ledger actually changed (eval resolved something or new tickets were appended).
+if ! git diff --quiet state/ 2>/dev/null; then
+    git add state/tickets_*.jsonl
+    git -c user.email=routines@crypto-setups -c user.name="crypto-setups routine" \
+        commit -m "chore(state): ticket ledger update $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    git push origin main 2>&1 | tail -5
+else
+    echo "ledger unchanged; skipping commit"
+fi
+```
+
+Non-fatal: if the push is rejected (another run pushed first), fetch + rebase + retry once. If the retry also fails, record the failure — the ledger update for this run is lost but the briefing and Notion page succeeded, so the pipeline is still a partial success. The next run will re-evaluate any in-flight tickets it can see from the remote ledger.
+
+If the push is rejected repeatedly, this is a signal that runs are overlapping — serialize them or investigate.
+
+## Step 6 — Confirm
 
 **Single-asset mode** — report one outcome:
 - **On success:** `Analysis uploaded to Notion: <notion_url>`

@@ -268,7 +268,38 @@ The payload has this shape:
                         "side": "above"|"below",
                         "distance_pct": float} | null,
     "rsi_1d_14":      float | null
-  } | null
+  } | null,
+
+  "active_tickets": [                      // setups from prior runs still non-terminal
+    {
+      "id": "BTC_LONG_20260422T0630Z",
+      "direction": "long" | "short",
+      "setup_type": "day_trade" | "swing",
+      "confidence": int,
+      "created_at": str,                   // ISO-8601
+      "entry_1": float, "entry_2": float,
+      "stop": float, "tp1": float, "tp2": float,
+      "invalidation":     {"type": str, "price": float} | null,
+      "kill_switch_up":   {"type": str, "price": float} | null,
+      "kill_switch_down": {"type": str, "price": float} | null,
+      "descriptor": str,                   // the original short-descriptor
+      "status": "armed" | "triggered" | "tp1_filled",
+      "triggered_at": str | null,
+      "tp1_reached_at": str | null
+    }
+  ],
+
+  "resolved_tickets": [                    // tickets whose status changed this run
+    {
+      /* ...all fields above... */
+      "status": "triggered" | "tp1_filled" | "tp2_filled" | "stopped"
+              | "invalidated" | "killed_up" | "killed_down" | "expired",
+      "resolved_at": str,                  // ISO-8601
+      "resolved_price": float,             // trigger price (stop, TP, condition level)
+      "resolution_reason": str             // "stop_hit" / "tp2_hit" / "invalidation_fired" /
+                                           // "kill_switch_up_fired" / "expiry_reached" / ...
+    }
+  ]
 }
 ```
 
@@ -284,8 +315,10 @@ The payload has this shape:
 8. If a side has no qualifying setup, emit the explicit skip line for that side. Never force — but do not let catalyst proximity alone collapse both sides to stand-aside; a Tighten-mode post-event setup is still a valid setup.
 9. Optional third setup only if independent confluence exists (different entry zone, ≥ 70% confidence, not just the same idea repackaged).
 10. **Pre-write fact audit (mandatory, internal — NOT written to briefing).** Before composing the final Markdown, build a short internal checklist of every factual claim that will appear in Sinteză, in skip-line reasons, and in Confidence rationales, mapping each to the **exact payload field** that supports it. Any claim whose supporting field is `null` or contradicts the bias/value in the payload must be **rewritten or dropped** before you call Write. This audit MUST respect the **Fact Discipline** rules below. See the template at the end of this file.
-11. Write `data/briefing.md` via the Write tool. Do NOT include a top-level page title.
-12. Respond with exactly: `done data/briefing.md` on a single line.
+11. **Render the ticket ledger at the TOP of the briefing** (see Section 0 below). Read `active_tickets` + `resolved_tickets` from the payload. If both are empty, skip the section entirely — do NOT write a "no active tickets" placeholder.
+12. Write `data/briefing.md` via the Write tool. Do NOT include a top-level page title.
+13. **Write `data/new_tickets.json`** — the structured representation of every *new* setup you just emitted in Section 5. One JSON object per setup, in the schema below. This file is the machine-readable contract with the ledger extractor; the Markdown is the human briefing. If you emit a skip line for a side, emit NO ticket for that side. The file must be written even when empty (`{"tickets": []}`) — the extractor reads it unconditionally.
+14. Respond with exactly: `done data/briefing.md data/new_tickets.json` on a single line.
 
 ## Catalyst Gate
 
@@ -696,6 +729,56 @@ Examples:
 - **Setup bullets:** ONE LINE EACH. Mechanics only.
 - **No duplicate info.** Each fact appears once.
 
+### Section 0 — Status tichete (conditional; only when ledger is non-empty)
+
+**Rendered only when `active_tickets` or `resolved_tickets` is non-empty.** This is the ledger-carry-forward block — the mechanism that stops the "each run contradicts the last" problem. It goes at the very top of the briefing, before Preț curent.
+
+**Shape:**
+
+```
+### Status tichete din rulări anterioare
+
+- **Active:** {N}
+  - `{id_short}` · {Long|Short} {Day trade|Swing} · entry $X/$Y · stop $Z · TP1 $A / TP2 $B · {armed|triggered|tp1_filled} · creat acum Nh
+- **Rezolvate în această rulare:** {M}
+  - `{id_short}` · {final status label} @ $P ({reason_label}, {when_label})
+```
+
+**Rules:**
+
+- `id_short` = strip the asset/direction prefix, keep the timestamp tail (e.g. `20260422T0630Z`).
+- Active ticket line includes: direction, setup type, entry ladder, stop, both TPs, current ledger status, and hours since `created_at` (relative to the payload's `timestamp_utc`).
+- Resolved ticket line includes the final status translated to Romanian:
+  | ledger status | render as |
+  |---|---|
+  | `triggered` | `intrat` |
+  | `tp1_filled` | `TP1 atins` |
+  | `tp2_filled` | `TP2 atins` |
+  | `stopped` | `stop-out` |
+  | `invalidated` | `invalidat` |
+  | `killed_up` | `kill-switch sus` |
+  | `killed_down` | `kill-switch jos` |
+  | `expired` | `expirat (fără fill)` |
+
+  Reason labels: `stop_hit` → `stop atins`, `tp2_hit` → `TP2 atins`, `tp1_hit` → `TP1 atins`, `invalidation_fired` → `invalidare declanșată`, `kill_switch_up_fired` → `kill-switch sus declanșat`, `kill_switch_down_fired` → `kill-switch jos declanșat`, `expiry_reached` → `expirat`.
+
+- Max 4 active tickets and 4 resolved shown. If more exist, show the 4 most recent and append `…+N mai vechi` as the last sub-bullet on that list.
+- Skip the Active or Rezolvate sub-section entirely if its count is 0. Never write `**Active:** 0`.
+- **This section is pure ledger — no analysis, no opinions, no repricing commentary.** The interpretation (should I still hold that active long?) is the reader's call, informed by the Sinteză that follows.
+
+**Example:**
+
+```
+### Status tichete din rulări anterioare
+
+- **Active:** 1
+  - `20260422T0630Z` · Long Swing · entry $76,894/$76,414 · stop $75,800 · TP1 $78,052 / TP2 $79,248 · armed · creat acum 3h
+- **Rezolvate în această rulare:** 1
+  - `20260421T1800Z` · Short Day trade · kill-switch sus @ $78,850 (kill_switch_up_fired, acum 2h)
+```
+
+If both counts are zero, the entire Section 0 is omitted — briefing starts at Preț curent.
+
 ### Section 1 — Preț curent (1 line)
 
 `**Preț curent:** $X (±X% 24h · ATR $Y)`
@@ -900,7 +983,82 @@ This audit is internal; **do not output it**. Respond with `done data/briefing.m
 - **Macro/news is gate-only and attribution-only.** News and calendar events are ALLOWED but ONLY when sourced from `data/macro_context.json`. Never cite events or headlines from memory. Never speculate about a Fed decision, ETF flow, SEC ruling, or exchange event beyond what's in the file. Macro does NOT vote in Order Flow — orderflow stays sovereign for direction.
 - **Never recommend position size** (agent doesn't know account size). Setup mechanics only.
 
+## `data/new_tickets.json` — structured ticket output
+
+Every setup block emitted in Section 5 of the briefing **must** also be written to `data/new_tickets.json` in the schema below. This file feeds the persistent ticket ledger so subsequent runs can check whether these tickets have been triggered, stopped, TP-hit, invalidated, or killed — without re-parsing the Markdown.
+
+**File shape (single JSON object):**
+
+```json
+{
+  "asset": "btc",
+  "timestamp_utc": "<payload.timestamp_utc verbatim>",
+  "tickets": [
+    {
+      "direction": "long" | "short",
+      "setup_type": "day_trade" | "swing",
+      "confidence": 85,
+      "entry_1": 76894.0,
+      "entry_2": 76414.0,
+      "stop": 75800.0,
+      "tp1": 78052.0,
+      "tp2": 79248.0,
+      "invalidation":     {"type": "4h_close_below", "price": 76132.0},
+      "kill_switch_up":   {"type": "1d_close_above", "price": 78728.0},
+      "kill_switch_down": {"type": "1d_close_below", "price": 73724.0},
+      "descriptor": "pullback în zona FVG/OB $76k–$77.5k"
+    }
+  ]
+}
+```
+
+**Condition types you may use:**
+
+| `type` | Evaluated against |
+|---|---|
+| `"1h_close_above"` / `"1h_close_below"` | any 1h close since `created_at` |
+| `"4h_close_above"` / `"4h_close_below"` | any 4h close since `created_at` |
+| `"1d_close_above"` / `"1d_close_below"` | any 1d close since `created_at` |
+| `"none"` | no automatic evaluation (qualitative only) |
+
+Prefer `4h_close_*` for invalidation (matches "swing invalidation TF" from Operating Principle #1) and `1d_close_*` for kill-switches (HTF structural).
+
+**Rules:**
+
+- One ticket object per setup block in Section 5. Skip lines produce NO ticket.
+- If the Markdown Invalidare line is qualitative-only (e.g. *"close 4h sub $76,132 cu menținere"* with no clean price anchor), still extract the price and set `type: "4h_close_below"`. The "menținere" narrative stays in the Markdown — the ledger only checks the close.
+- If the Invalidare line references an event (e.g. *"invalid pre-Core Retail Sales"*), use `"type": "none"` for invalidation — the ledger cannot evaluate event narratives. The Markdown still carries the full rule for the human reader.
+- `kill_switch_up` / `kill_switch_down` come from Section 6 (Kill-switch global). Split the two directions into separate fields. If a direction is absent from the kill-switch line, set that field to `null`.
+- Prices must match the briefing exactly — no rounding, no reformatting. Thousand-separators and `$` prefixes are rendering concerns; the JSON is raw numbers.
+- If no setups are emitted on either side, still write the file: `{"asset": "...", "timestamp_utc": "...", "tickets": []}`. The extractor reads it unconditionally.
+- **`data/new_tickets.json` is NOT the ledger itself** — it is the delta for this run only. The extractor script appends these to `state/tickets_{asset}.jsonl` with minted IDs and `status: "armed"`.
+
+**Example output for a run with one long setup + one skip:**
+
+```json
+{
+  "asset": "btc",
+  "timestamp_utc": "2026-04-22T06:30:00Z",
+  "tickets": [
+    {
+      "direction": "long",
+      "setup_type": "swing",
+      "confidence": 85,
+      "entry_1": 76894.0,
+      "entry_2": 76414.0,
+      "stop": 75800.0,
+      "tp1": 78052.0,
+      "tp2": 79248.0,
+      "invalidation":     {"type": "4h_close_below", "price": 76132.0},
+      "kill_switch_up":   {"type": "1d_close_above", "price": 78728.0},
+      "kill_switch_down": {"type": "1d_close_below", "price": 73724.0},
+      "descriptor": "pullback în zona FVG/OB $76k–$77.5k"
+    }
+  ]
+}
+```
+
 ## Response Format
 
-- On success: respond with exactly `done data/briefing.md` on a single line. No other text.
+- On success: respond with exactly `done data/briefing.md data/new_tickets.json` on a single line. No other text.
 - On payload error or write failure: respond with `error: <brief description>`. Do not retry.
