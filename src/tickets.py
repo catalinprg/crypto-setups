@@ -8,21 +8,25 @@ Each run:
   3. Writes the ledger back and exposes the evaluated ticket set to the
      analyst agent via the payload.
 
+The ledger tracks **pending limit orders only**. Once a limit fills or a
+structural kill/invalidation fires, the ticket is terminal — the live trade
+(post-fill) is managed by the human, not by this module. This keeps the
+ledger semantics focused: "what setups from prior briefings are still
+waiting for a fill?" and nothing more.
+
 The module is pure functions + simple JSONL I/O — no network, no globals.
 Exit-condition evaluation is deterministic and has unit tests.
 
 Ticket lifecycle:
-    armed ── (limit touched) ─────────────→ triggered ─┬── stop hit ──→ stopped
-      │                                                │── tp2 hit ───→ tp2_filled
-      │                                                └── tp1 hit ───→ tp1_filled (tp1_reached flag persists)
-      │── invalidation fires ─────────────→ invalidated
-      │── kill-switch up fires ───────────→ killed_up
-      │── kill-switch down fires ─────────→ killed_down
-      └── expiry hours pass without fill ─→ expired
+    armed ── (any entry touched) ───────→ triggered       [terminal]
+      │── invalidation fires ───────────→ invalidated    [terminal]
+      │── kill-switch up fires ─────────→ killed_up      [terminal]
+      │── kill-switch down fires ───────→ killed_down    [terminal]
+      └── expiry hours pass without fill → expired       [terminal]
 
-Terminal states: stopped, tp2_filled, invalidated, killed_up, killed_down, expired.
-Non-terminal: armed, triggered, tp1_filled (tp1_filled means the runner leg
-is live — ticket remains actionable until stop / tp2 / invalidation / kill).
+Only `armed` is non-terminal. All other states are terminal — the ticket
+drops out of the active list on next run and survives only in the JSONL
+history.
 """
 from __future__ import annotations
 
@@ -35,9 +39,6 @@ from typing import Any, Literal
 TicketStatus = Literal[
     "armed",
     "triggered",
-    "tp1_filled",
-    "tp2_filled",
-    "stopped",
     "invalidated",
     "killed_up",
     "killed_down",
@@ -45,7 +46,7 @@ TicketStatus = Literal[
 ]
 
 TERMINAL_STATUSES: frozenset[str] = frozenset({
-    "tp2_filled", "stopped", "invalidated", "killed_up", "killed_down", "expired",
+    "triggered", "invalidated", "killed_up", "killed_down", "expired",
 })
 
 _CONDITION_TYPES: frozenset[str] = frozenset({
@@ -159,6 +160,17 @@ def _resolve(
 def evaluate_ticket(ticket: dict, snapshot: MarketSnapshot) -> dict:
     """Return an updated copy of the ticket with status advanced per the
     snapshot. Never mutates the input. Terminal tickets pass through unchanged.
+
+    Priority order (first match wins):
+      1. Kill-switch up / down   (1d close beyond the global anchor)
+      2. Invalidation            (setup-specific close rule)
+      3. Trigger                 (1h low/high touches ANY entry)
+      4. Expiry                  (wall-clock age beyond the expiry horizon)
+
+    Kills and invalidations take precedence over trigger so that a bar which
+    simultaneously sweeps into the entry AND closes below invalidation on the
+    same timeframe resolves as invalidated (the setup was structurally dead
+    before the fill was clean).
     """
     status = ticket.get("status", "armed")
     if status in TERMINAL_STATUSES:
@@ -173,71 +185,40 @@ def evaluate_ticket(ticket: dict, snapshot: MarketSnapshot) -> dict:
         if fired:
             return _resolve(ticket, new_status, f"{field}_fired", snapshot, trig_price)
 
-    # --- Invalidation (setup-specific exit).
+    # --- Invalidation (setup-specific exit). Takes precedence over trigger.
     fired, trig_price, _ = _condition_fires(ticket.get("invalidation"), snapshot)
     if fired:
         return _resolve(ticket, "invalidated", "invalidation_fired", snapshot, trig_price)
 
-    # --- Limit fill + post-fill TP/SL checks.
+    # --- Trigger: price touched ANY entry since created_at. Terminal — once
+    # filled, the ticket leaves the ledger; the human manages the live trade.
     direction = ticket.get("direction", "long")
     entry_1 = ticket.get("entry_1")
     entry_2 = ticket.get("entry_2")
-    entry_shallow = entry_1 if entry_1 is not None else entry_2
-    entry_deep = entry_2 if entry_2 is not None else entry_1
+    entries = [e for e in (entry_1, entry_2) if e is not None]
 
     highest, lowest = _bars_extremes(snapshot.bars_1h_since_created)
-    triggered_before = status in ("triggered", "tp1_filled")
-    triggered_now = triggered_before
 
-    if not triggered_now and entry_shallow is not None:
-        # Long: price sweeps down through the shallow entry → fill.
-        # Short: price sweeps up through the shallow entry → fill.
-        if direction == "long" and lowest is not None and lowest <= entry_shallow:
-            triggered_now = True
-        elif direction == "short" and highest is not None and highest >= entry_shallow:
-            triggered_now = True
+    if entries:
+        if direction == "long" and lowest is not None:
+            touched = min(entries)  # deepest long entry (lowest price)
+            if lowest <= max(entries):  # any entry hit
+                # Trigger price = the shallower of (shallowest entry, bar low).
+                # Using the shallower entry as trigger price reflects that the
+                # limit fills at its listed price, not at the bar's extreme.
+                shallow = max(entries)
+                trig = shallow if lowest <= shallow else touched
+                return _resolve(ticket, "triggered", "entry_touched", snapshot, trig)
+        elif direction == "short" and highest is not None:
+            if highest >= min(entries):  # any entry hit
+                shallow = min(entries)
+                trig = shallow if highest >= shallow else max(entries)
+                return _resolve(ticket, "triggered", "entry_touched", snapshot, trig)
 
-    if triggered_now and not triggered_before:
-        out = dict(ticket)
-        out["status"] = "triggered"
-        out["triggered_at"] = snapshot.now_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
-        # After marking triggered, still evaluate stop/TP in same pass —
-        # caller gets the most advanced state reachable from this snapshot.
-        ticket = out
-
-    if triggered_now:
-        stop = ticket.get("stop")
-        tp1 = ticket.get("tp1")
-        tp2 = ticket.get("tp2")
-
-        if stop is not None:
-            if direction == "long" and lowest is not None and lowest <= stop:
-                return _resolve(ticket, "stopped", "stop_hit", snapshot, stop)
-            if direction == "short" and highest is not None and highest >= stop:
-                return _resolve(ticket, "stopped", "stop_hit", snapshot, stop)
-
-        if tp2 is not None:
-            if direction == "long" and highest is not None and highest >= tp2:
-                return _resolve(ticket, "tp2_filled", "tp2_hit", snapshot, tp2)
-            if direction == "short" and lowest is not None and lowest <= tp2:
-                return _resolve(ticket, "tp2_filled", "tp2_hit", snapshot, tp2)
-
-        if tp1 is not None and ticket.get("status") != "tp1_filled":
-            if direction == "long" and highest is not None and highest >= tp1:
-                out = dict(ticket)
-                out["status"] = "tp1_filled"
-                out["tp1_reached_at"] = snapshot.now_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
-                return out
-            if direction == "short" and lowest is not None and lowest <= tp1:
-                out = dict(ticket)
-                out["status"] = "tp1_filled"
-                out["tp1_reached_at"] = snapshot.now_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
-                return out
-
-        return ticket
-
-    # --- Not triggered: check expiry.
-    expiry_hours = ticket.get("expiry_hours") or (24 if ticket.get("setup_type") == "day_trade" else 72)
+    # --- Expiry: armed ticket whose wall-clock age has exceeded the horizon.
+    expiry_hours = ticket.get("expiry_hours") or (
+        24 if ticket.get("setup_type") == "day_trade" else 72
+    )
     created_at = ticket.get("created_at")
     if created_at:
         try:

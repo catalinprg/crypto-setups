@@ -1,5 +1,10 @@
-"""Tests for the persistent ticket ledger + exit-condition evaluator."""
-from datetime import datetime, timezone, timedelta
+"""Tests for the persistent ticket ledger + exit-condition evaluator.
+
+The ledger tracks PENDING LIMIT ORDERS only. Once any entry is touched, the
+ticket transitions to `triggered` and is terminal — the live trade (post-
+fill management, SL hits, exits) is handled by the human, not this module.
+"""
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -37,8 +42,6 @@ def _ticket(**overrides) -> dict:
         "entry_1": 76894.0,
         "entry_2": 76414.0,
         "stop": 75800.0,
-        "tp1": 78052.0,
-        "tp2": 79248.0,
         "invalidation": {"type": "4h_close_below", "price": 76132.0},
         "kill_switch_up": {"type": "1d_close_above", "price": 78728.0},
         "kill_switch_down": {"type": "1d_close_below", "price": 73724.0},
@@ -58,71 +61,44 @@ def _snap(bars_1h=None, bars_4h=None, bars_1d=None, price=77500.0, now=NOW):
     )
 
 
-# ---------------------------------------------------------------- trigger
+# ---------------------------------------------------------------- pending
 def test_armed_stays_armed_when_price_never_touches_entry():
     snap = _snap(bars_1h=[_bar("2026-04-22T07:00:00+00:00", 77800, 77100, 77400)])
     out = evaluate_ticket(_ticket(), snap)
     assert out["status"] == "armed"
 
 
-def test_long_triggers_when_1h_low_touches_entry_1():
+# ---------------------------------------------------------------- trigger = terminal
+def test_long_triggers_on_shallow_entry_touch():
+    # Price sweeps down through entry_1 but not entry_2. Still a fill (limit
+    # at entry_1 would execute). Triggered is terminal.
     snap = _snap(bars_1h=[_bar("2026-04-22T09:00:00+00:00", 77500, 76800, 77200)])
     out = evaluate_ticket(_ticket(), snap)
     assert out["status"] == "triggered"
-    assert out["triggered_at"].startswith("2026-04-22T10:")
+    assert out["status"] in TERMINAL_STATUSES
+    assert out["resolution_reason"] == "entry_touched"
+    assert out["resolved_price"] == 76894.0  # shallow entry price, not the bar low
 
 
-def test_short_triggers_when_1h_high_touches_entry_1():
+def test_long_triggers_on_deep_entry_when_price_wicks_through_both():
+    # Price wicks through entry_2 → both legs would have filled. Still just
+    # one triggered event (ledger doesn't care about ladder mechanics).
+    snap = _snap(bars_1h=[_bar("2026-04-22T09:00:00+00:00", 77000, 76300, 76700)])
+    out = evaluate_ticket(_ticket(), snap)
+    assert out["status"] == "triggered"
+
+
+def test_short_triggers_on_shallow_entry_touch():
     ticket = _ticket(
         direction="short",
         entry_1=78500.0, entry_2=78900.0,
-        stop=79500.0, tp1=77500.0, tp2=76500.0,
+        stop=79500.0,
         invalidation={"type": "4h_close_above", "price": 79100.0},
     )
     snap = _snap(bars_1h=[_bar("2026-04-22T09:00:00+00:00", 78600, 77900, 78200)])
     out = evaluate_ticket(ticket, snap)
     assert out["status"] == "triggered"
-
-
-# ---------------------------------------------------------------- stop
-def test_stopped_after_trigger_when_low_breaches_stop():
-    snap = _snap(bars_1h=[
-        _bar("2026-04-22T09:00:00+00:00", 77500, 76500, 77000),  # triggers
-        _bar("2026-04-22T10:00:00+00:00", 77000, 75700, 75750),  # stops
-    ])
-    out = evaluate_ticket(_ticket(), snap)
-    assert out["status"] == "stopped"
-    assert out["resolved_price"] == 75800.0  # stop level, not the bar low
-
-
-# ---------------------------------------------------------------- TP
-def test_tp1_fills_keeps_ticket_non_terminal():
-    snap = _snap(bars_1h=[
-        _bar("2026-04-22T09:00:00+00:00", 77000, 76500, 76900),  # triggers
-        _bar("2026-04-22T10:00:00+00:00", 78100, 76900, 78000),  # TP1 hit
-    ])
-    out = evaluate_ticket(_ticket(), snap)
-    assert out["status"] == "tp1_filled"
-    assert out["status"] not in TERMINAL_STATUSES
-
-
-def test_tp2_fills_is_terminal():
-    snap = _snap(bars_1h=[
-        _bar("2026-04-22T09:00:00+00:00", 77000, 76500, 76900),
-        _bar("2026-04-22T10:00:00+00:00", 79300, 77900, 79200),  # TP2 hit
-    ])
-    out = evaluate_ticket(_ticket(), snap)
-    assert out["status"] == "tp2_filled"
-    assert out["status"] in TERMINAL_STATUSES
-
-
-def test_tp2_wins_over_tp1_same_pass():
-    snap = _snap(bars_1h=[
-        _bar("2026-04-22T09:00:00+00:00", 77000, 76500, 76900),
-        _bar("2026-04-22T10:00:00+00:00", 79500, 77900, 79200),  # both TPs in range
-    ])
-    out = evaluate_ticket(_ticket(), snap)
-    assert out["status"] == "tp2_filled"
+    assert out["resolved_price"] == 78500.0  # shallow short entry
 
 
 # ---------------------------------------------------------------- invalidation
@@ -130,13 +106,24 @@ def test_invalidation_fires_on_4h_close_below():
     snap = _snap(bars_4h=[_bar("2026-04-22T08:00:00+00:00", 77000, 75800, 76000)])
     out = evaluate_ticket(_ticket(), snap)
     assert out["status"] == "invalidated"
-    assert out["resolution_reason"] == "invalidation_fired"
+    assert out["status"] in TERMINAL_STATUSES
 
 
 def test_invalidation_ignores_wick_below_if_close_holds():
     snap = _snap(bars_4h=[_bar("2026-04-22T08:00:00+00:00", 77000, 75800, 76500)])
     out = evaluate_ticket(_ticket(), snap)
     assert out["status"] == "armed"
+
+
+def test_invalidation_beats_trigger_in_same_pass():
+    # Same 4h window: price wicks into entry AND closes below invalidation.
+    # Structural death wins — the fill was into a dying setup.
+    snap = _snap(
+        bars_1h=[_bar("2026-04-22T08:00:00+00:00", 77000, 76300, 76400)],
+        bars_4h=[_bar("2026-04-22T08:00:00+00:00", 77000, 75800, 76000)],
+    )
+    out = evaluate_ticket(_ticket(), snap)
+    assert out["status"] == "invalidated"
 
 
 # ---------------------------------------------------------------- kill-switch
@@ -152,11 +139,11 @@ def test_kill_switch_down_fires_on_1d_close_below():
     assert out["status"] == "killed_down"
 
 
-def test_kill_switch_trumps_invalidation_when_both_fire():
-    # If both a 4h-invalidation and a 1d-kill fire, kill wins (priority order).
+def test_kill_switch_trumps_invalidation_and_trigger():
     snap = _snap(
-        bars_4h=[_bar("2026-04-22T08:00:00+00:00", 77000, 75800, 76000)],  # invalid
-        bars_1d=[_bar("2026-04-22T00:00:00+00:00", 77000, 73500, 73700)],  # kill down
+        bars_1h=[_bar("2026-04-22T08:00:00+00:00", 77000, 76300, 76400)],   # would trigger
+        bars_4h=[_bar("2026-04-22T08:00:00+00:00", 77000, 75800, 76000)],   # would invalidate
+        bars_1d=[_bar("2026-04-22T00:00:00+00:00", 77000, 73500, 73700)],   # kills first
     )
     out = evaluate_ticket(_ticket(), snap)
     assert out["status"] == "killed_down"
@@ -169,13 +156,6 @@ def test_expiry_fires_for_untriggered_swing_after_72h():
     assert out["status"] == "expired"
 
 
-def test_expiry_does_not_fire_after_trigger():
-    old_ticket = _ticket(created_at="2026-04-18T06:30:00Z", status="triggered")
-    out = evaluate_ticket(old_ticket, _snap())
-    # Triggered tickets aren't expired — they live or die on stop/TP/invalidation.
-    assert out["status"] == "triggered"
-
-
 def test_day_trade_expires_at_24h_not_72h():
     old_ticket = _ticket(
         created_at="2026-04-21T08:00:00Z", setup_type="day_trade",
@@ -184,13 +164,21 @@ def test_day_trade_expires_at_24h_not_72h():
     assert out["status"] == "expired"
 
 
+def test_expiry_does_not_fire_for_already_triggered_ticket():
+    # Triggered tickets are terminal — even past the expiry horizon they
+    # pass through unchanged.
+    old_ticket = _ticket(created_at="2026-04-18T06:30:00Z", status="triggered")
+    out = evaluate_ticket(old_ticket, _snap())
+    assert out["status"] == "triggered"
+
+
 # ---------------------------------------------------------------- terminal passthrough
 def test_terminal_ticket_is_not_re_evaluated():
-    ticket = _ticket(status="stopped", resolved_at="2026-04-20T10:00:00Z")
+    ticket = _ticket(status="triggered", resolved_at="2026-04-20T10:00:00Z")
     # Put in bars that would fire kill-switch if evaluated.
     snap = _snap(bars_1d=[_bar("2026-04-22T00:00:00+00:00", 80000, 77000, 79000)])
     out = evaluate_ticket(ticket, snap)
-    assert out["status"] == "stopped"
+    assert out["status"] == "triggered"
 
 
 # ---------------------------------------------------------------- ledger IO
@@ -224,8 +212,32 @@ def test_run_ledger_cycle_splits_active_and_resolved(tmp_path: Path):
     assert active[0]["status"] == "armed"
     assert len(resolved) == 1
     assert resolved[0]["status"] == "expired"
-    # Ledger on disk still has BOTH tickets (expired one is now terminal).
     assert len(load_ledger(path)) == 2
+
+
+def test_run_ledger_cycle_triggered_drops_from_active(tmp_path: Path):
+    # Key test for the new semantics: a ticket that triggers this run must
+    # NOT show up in the next run's active list — it's terminal.
+    asset_root = tmp_path
+    path = ledger_path("btc", asset_root)
+    save_ledger(path, [_ticket()])
+    bars = {
+        "1h": [_bar("2026-04-22T09:00:00+00:00", 77500, 76800, 77200)],  # triggers
+        "4h": [], "1d": [],
+    }
+    active, resolved = run_ledger_cycle(
+        "btc", NOW, 77500.0, bars_by_tf=bars, ledger_root=asset_root,
+    )
+    assert active == []
+    assert len(resolved) == 1
+    assert resolved[0]["status"] == "triggered"
+    # Next run: ledger still on disk, but the triggered ticket is terminal so
+    # it won't appear in active again.
+    active2, resolved2 = run_ledger_cycle(
+        "btc", NOW, 77500.0, bars_by_tf=bars, ledger_root=asset_root,
+    )
+    assert active2 == []
+    assert resolved2 == []
 
 
 def test_build_snapshot_filters_bars_before_created_at():
@@ -241,8 +253,6 @@ def test_build_snapshot_filters_bars_before_created_at():
 
 
 def test_append_new_tickets_mints_ids_and_preserves_ledger(tmp_path: Path):
-    # Two new tickets created at the same instant — second must get a
-    # suffixed id to avoid clashing with the first.
     asset_root = tmp_path
     n = append_new_tickets(
         "btc",

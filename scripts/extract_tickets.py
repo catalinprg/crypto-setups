@@ -23,10 +23,14 @@ def _validate(ticket: dict) -> list[str]:
         errors.append(f"direction must be 'long' or 'short', got {ticket.get('direction')!r}")
     if ticket.get("setup_type") not in ("day_trade", "swing"):
         errors.append(f"setup_type must be 'day_trade' or 'swing', got {ticket.get('setup_type')!r}")
-    for field in ("entry_1", "entry_2", "stop", "tp1", "tp2"):
+    for field in ("entry_1", "entry_2", "stop"):
         v = ticket.get(field)
         if not isinstance(v, (int, float)):
             errors.append(f"{field} must be numeric, got {v!r}")
+    if "tp1" in ticket or "tp2" in ticket:
+        errors.append(
+            "tp1/tp2 fields are no longer supported — the analyst must not emit targets"
+        )
     return errors
 
 
