@@ -6,7 +6,17 @@ from src.notion_writer import NOTION_PARENT_ID, build_page_payload
 from src.telegram_notify import build_summary, send as send_telegram
 
 MIN_PAIRS_PER_TF = 2
-ATR_CLUSTER_MULTIPLIER = 0.25
+# Confluence clustering radius. Anchored on 4h ATR because every setup now
+# targets the swing horizon (1–5 days) — the 4h is the execution TF, so its
+# ATR is the natural scale for "do these levels belong to the same zone?"
+# Fallback to daily_atr × 0.15 when 4h ATR is null (insufficient bars).
+# Previous value (daily_atr × 0.25) was ~35% wider and routinely clustered
+# levels that were a full BTC percent apart into a single zone, inflating
+# the "strong" classifier.
+CLUSTER_RADIUS_FROM_4H_ATR = 0.5
+CLUSTER_RADIUS_FROM_DAILY_ATR_FALLBACK = 0.15
+# Legacy alias kept for tests that still import it. Unused in the pipeline.
+ATR_CLUSTER_MULTIPLIER = CLUSTER_RADIUS_FROM_DAILY_ATR_FALLBACK
 MAX_EXTENSION_DISTANCE_PCT = 0.15
 
 

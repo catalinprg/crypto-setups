@@ -125,3 +125,53 @@ def test_all_avwap_variants_count_as_one_family():
     assert len(zones) == 1
     assert zones[0].source_count == 2  # MS + AVWAP, that's it
     assert zones[0].classification == "structural_pivot"
+
+
+def test_same_tf_structural_event_collapses_to_one_family():
+    """A single 4h BOS typically prints: MS_BOS_LEVEL on the break bar, OB
+    on the prior candle, FVG inside the breakout candle. Price-adjacent,
+    same TF — one event, not three signals. Must collapse to 1 family for
+    the classifier, so a pure same-TF structural-event cluster does NOT
+    qualify as 'strong' by itself.
+    """
+    levels = [
+        _lvl(100.0, "MS_BOS_LEVEL", tf="4h"),
+        _lvl(100.05, "OB_BULL",     tf="4h"),
+        _lvl(100.1,  "FVG_BULL",    tf="4h"),
+    ]
+    zones = cluster_levels(levels, radius=0.5)
+    assert len(zones) == 1
+    assert zones[0].source_count == 1  # one STRUCTURAL_EVENT_4h family
+    assert zones[0].classification == "level"  # NOT strong, NOT structural_pivot
+
+
+def test_cross_tf_structural_signals_stay_separate():
+    """Same set of families but spread across different TFs = different
+    events at similar price. Must count as 3 distinct families.
+    """
+    levels = [
+        _lvl(100.0, "MS_BOS_LEVEL", tf="4h"),
+        _lvl(100.05, "OB_BULL",     tf="1h"),  # different event
+        _lvl(100.1,  "FVG_BULL",    tf="1d"),  # yet another
+    ]
+    zones = cluster_levels(levels, radius=0.5)
+    assert len(zones) == 1
+    assert zones[0].source_count == 3  # 3 independent structural signals
+    assert zones[0].classification == "strong"
+
+
+def test_same_tf_event_plus_orthogonal_sources_still_classifies_strong():
+    """Structural dedup should not block orthogonal confluence: a same-TF
+    MS+OB+FVG event (1 family) + LIQ + FIB = 3 families → strong.
+    """
+    levels = [
+        _lvl(100.0, "MS_BOS_LEVEL", tf="4h"),
+        _lvl(100.02, "OB_BULL",     tf="4h"),
+        _lvl(100.04, "FVG_BULL",    tf="4h"),
+        _lvl(100.06, "LIQ_SSL",     tf="1d"),
+        _lvl(100.08, "FIB_618",     tf="1w"),
+    ]
+    zones = cluster_levels(levels, radius=0.5)
+    assert len(zones) == 1
+    assert zones[0].source_count == 3  # STRUCTURAL_EVENT_4h + LIQ + FIB
+    assert zones[0].classification == "strong"

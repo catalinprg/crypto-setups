@@ -156,7 +156,11 @@ def test_expiry_fires_for_untriggered_swing_after_72h():
     assert out["status"] == "expired"
 
 
-def test_day_trade_expires_at_24h_not_72h():
+def test_legacy_day_trade_setup_type_still_expires_at_24h():
+    """Legacy tickets on the ledger may still carry setup_type='day_trade'
+    from before the horizon was retired. The evaluator must keep honoring
+    that for the tail of tickets already in flight.
+    """
     old_ticket = _ticket(
         created_at="2026-04-21T08:00:00Z", setup_type="day_trade",
     )  # 26h ago

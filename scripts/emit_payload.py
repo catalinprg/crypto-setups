@@ -20,8 +20,8 @@ from src.fetch import fetch_all, taker_delta_per_tf
 from src.venue_aggregator import fetch_all_venues, aggregate_bars
 from src.fibs import compute_all
 from src.main import (
-    ATR_CLUSTER_MULTIPLIER, MAX_EXTENSION_DISTANCE_PCT,
-    MIN_PAIRS_PER_TF, _latest,
+    CLUSTER_RADIUS_FROM_4H_ATR, CLUSTER_RADIUS_FROM_DAILY_ATR_FALLBACK,
+    MAX_EXTENSION_DISTANCE_PCT, MIN_PAIRS_PER_TF, _latest,
 )
 from src.swings import atr, detect_swings, detect_pivots
 from src.avwap import compute_avwap, resolve_anchors
@@ -99,7 +99,6 @@ async def build() -> dict:
     daily_bars = ohlc["1d"]
     current_price = daily_bars[-1].close
     daily_atr = _latest(atr(daily_bars, 14))
-    radius = daily_atr * ATR_CLUSTER_MULTIPLIER
 
     # Per-TF ATR (14). Used by the agent for TF-appropriate stop sizing:
     # 1h for intraday triggers, 4h for swing entries, 1d as the macro buffer.
@@ -112,6 +111,15 @@ async def build() -> dict:
         except RuntimeError:
             return None
     atr_by_tf = {tf: _safe_atr(tf) for tf in ("1h", "4h", "1d")}
+
+    # Swing-anchored clustering radius. 4h ATR is the natural scale for the
+    # 1–5-day horizon. Fall back to daily ATR × 0.15 when 4h bars aren't
+    # available (new asset / very short history).
+    atr_4h = atr_by_tf.get("4h")
+    if atr_4h is not None:
+        radius = atr_4h * CLUSTER_RADIUS_FROM_4H_ATR
+    else:
+        radius = daily_atr * CLUSTER_RADIUS_FROM_DAILY_ATR_FALLBACK
 
     fibs = compute_all(all_pairs)
     fibs = [

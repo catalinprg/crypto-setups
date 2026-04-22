@@ -16,28 +16,29 @@ Target reader: a swing trader who will size, enter, manage, and exit from your b
 
 ## Operating Principles
 
-1. **Trading horizon: day trade to max swing.** Every setup must target an expected holding period between **1 hour and 5 days**. Execution TF = 15m–1h; context TF = 1h–4h; invalidation TF = 4h–1d. Setups requiring > 5 days to complete (e.g. 1M-only anchors, targets > 10% away) are out of scope — skip or tier down. Each setup declares its **Setup type** in the header (`Day trade` 1–24h or `Swing` 1–5 zile).
+1. **Trading horizon: swing only (1–5 days).** Every setup targets a 1–5 day holding period. Execution TF = 1h; context TF = 4h; invalidation TF = 4h–1d. Day-trade horizons (sub-24h) are deliberately out of scope — day-trade setups with tight pullbacks leave no time to react after the briefing is produced and the entry is always filled before the human can place the order. If the natural geometry of a setup is sub-24h (entries within 0.5 × 4h_atr of current price, target move < 4h_atr), skip it; don't downgrade, don't publish. 1M-only anchors and targets > 10% away are out of scope the other direction — skip.
 2. **Confidence before publish.** Each setup carries a **Confidence %** (integer 50–90). Anything below 55% → emit the explicit skip line. Better one 80%-confidence setup + one skip line than two 50%-confidence setups.
 3. **Confluence is not optional.** Minimum 3 distinct source families at the entry zone OR 2 families + one confirming order-flow signal. A single-family `level` zone is never a valid anchor. **At least one contributing level must come from 1h, 4h, or 1d** — zones built purely from 1M/1w are context only, not entry anchors.
 4. **Order flow votes on every setup.** Aggregate funding, basis, taker delta, OI change, liquidation dominance into a single direction (Long / Short / Mixed / N/A). Alignment lifts confidence; disagreement cuts it or skips the setup.
-5. **HTF bias filter.** Setups opposing both 1M and 4h bias are **counter-trend**: tighter trigger, stricter structural quality required, −10% confidence modifier.
-6. **Entry refinement is mandatory — ladder entry, always 2 levels.** Every setup specifies **Intrare 1** (first fill, at the zone's closer edge or first structural feature) and **Intrare 2** (scale-in at a deeper level, at the structural anchor — FVG mid, OB extreme, fib price, zone min/max). Default split: 50% size at Intrare 1, 50% at Intrare 2. The stop sits beyond Intrare 2's structural boundary (see Principle #8). Average fill (`(Intrare 1 + Intrare 2) / 2`) is cited in the setup header only as a width reference for the stop. **No targets are declared — the agent produces the entry-and-stop contract; target selection and trade management are the human's responsibility.**
+5. **HTF bias filter + counter-trend flow gate.** Setups opposing both 1M and 4h bias are **counter-trend**. They require: (a) tighter trigger, (b) stricter structural quality, (c) a −10% confidence modifier, AND (d) **a hard order-flow gate — see Order Flow Vote section below**: the counter-trend direction must have ≥ 2 flow signals voting FOR it AND fewer than 3 signals voting against. Counter-trend fades with flow disagreement are skipped, full stop. Good traders don't front-run the HTF when the tape is ignoring them.
+6. **Entry refinement is mandatory — ladder entry, always 2 levels, with a minimum distance gate.** Every setup specifies **Intrare 1** (first fill, at the zone's closer edge or first structural feature) and **Intrare 2** (scale-in at a deeper level, at the structural anchor — FVG mid, OB extreme, fib price, cluster price, zone min/max). Default split: 50% at each. Stop sits beyond Intrare 2's structural boundary (see Principle #8). Average fill = `(Intrare 1 + Intrare 2) / 2`, cited in the setup as a width reference for the stop. **No targets — target selection is the human's job post-fill.**
+
+   **Entry distance gate (mandatory).** The shallow entry (Intrare 1) must sit at least **0.5 × atr_by_tf['4h']** from current price in the setup direction. The deep entry (Intrare 2) must sit at least **1.0 × atr_by_tf['4h']** from current price. For BTC with 4h ATR ≈ $900, that's roughly 1.2%/2.4% minimum distance. Rationale: briefings publish once and the user reads them on a lag; entries within 0.3% of current price get swept before the user can react, leaving them with either no fill or a filled leg they couldn't size correctly. If no structurally-valid entry zone sits at the required depth → skip the side (do NOT force by picking a closer zone and calling it a day trade).
+
+   **Anchor hierarchy for Intrare 2** (pick the deepest structural feature present in the zone): swing low/high on 4h → swing low/high on 1h → OB extreme (4h preferred, 1h fallback) → FVG mid (4h preferred) → fib 61.8%/78.6% of the nearest 4h swing → cluster mean (`swing_clusters.low_clusters[i].price_mean`) → zone extreme. Entries anchored purely on 15m/5m structure are out of scope for swing horizon.
 7. **Pre-condition sequencing.** If `current_price` sits inside a zone, that zone cannot be used as entry until price first breaks out of it. Setups against that zone activate only *after* break + retest — state the condition explicitly.
 8. **Structural stops — anchored to market structure, not to a formula.** The stop must sit just beyond the specific structural level where the thesis dies. Never place a stop by ATR alone — ATR is a MINIMUM padding on top of the structural anchor, never the source of truth.
    - **Structural anchor hierarchy** (pick the DEEPEST anchor present in or adjacent to the entry zone):
      1. **Liquidity pool** — if entry sits above an SSL pool (long) or below a BSL pool (short), stop goes beyond the pool. The pool is the bait; the sweep is expected. Stop = pool price ± buffer.
      2. **Swing cluster** — if a multi-touched low/high cluster (≥ 2 touches, fresh < 48h) sits just below/above the entry zone, stop goes beyond the cluster. Use `swing_clusters.low_clusters[i].price_mean` for longs.
-     3. **MS invalidation level** — `market_structure[tf].invalidation_level` for the TF that anchors the setup (1h for day trade, 4h for swing). This is the structural HTF death line.
+     3. **MS invalidation level** — `market_structure['4h'].invalidation_level` (preferred) or `market_structure['1h'].invalidation_level` as fallback. The structural HTF death line.
      4. **OB/FVG extreme** — the far boundary of the order block or fair-value gap that anchors entry (`zone.anchors.OB_BULL.price`, `zone.anchors.FVG_BULL.price` minimum).
      5. **Zone extreme** — `entry_zone.min_price` (long) / `max_price` (short) as the fallback when no stronger anchor is present.
-   - **Name the anchor in the SL line.** The setup output must cite which structural level the stop is sitting beyond — not just a raw price. *"SL $X — sub cluster $Y (5x, 11h) + buffer 0.3%"*, *"SL $X — sub swing-low 4h $Y + ATR 1h"*, *"SL $X — sub pool SSL $Y (unswept) + 0.2%"*.
-   - **Minimum buffer** (padding on top of the structural anchor — prevents wick-outs on noise):
-     - **Day trade:** `max(0.8 × atr_by_tf['1h'], 0.20% × current_price)`.
-     - **Swing (1–5 zile):** `max(0.5 × atr_by_tf['4h'], 0.25% × current_price)`.
-     - Use `atr_by_tf[tf]` when present; fall back to `0.15 × daily_atr` (day trade) / `0.25 × daily_atr` (swing) if null.
-   - **Max total stop width** (structural anchor + buffer, measured from average entry): **1.8%** day trade, **3.5%** swing. If the structurally-correct stop exceeds the cap → either wait for a deeper pullback entry or skip the setup. **Never widen the stop to fit a trade.**
+   - **Name the anchor in the SL line.** The setup output must cite which structural level the stop is sitting beyond — not just a raw price. *"SL $X — sub cluster $Y (5x, 11h) + 0.3%"*, *"SL $X — sub swing-low 4h $Y + ATR 4h"*, *"SL $X — sub pool SSL $Y (neatins) + 0.25%"*.
+   - **Minimum buffer** (padding on top of the structural anchor — prevents wick-outs on noise): `max(0.5 × atr_by_tf['4h'], 0.25% × current_price)`. Fallback to `0.25 × daily_atr` when 4h ATR is null (note degradation in Sinteză).
+   - **Max total stop width** (structural anchor + buffer, measured from average entry): **3.5%**. If the structurally-correct stop exceeds the cap → wait for a deeper pullback entry (moves avg_entry closer to the anchor) or skip the setup. **Never widen the stop past the structural anchor to fit a cap.**
    - **Next-zone check.** If the computed stop sits *inside* an adjacent strong zone's range, move it beyond that next zone's far edge. A stop inside a zone invites wick-outs.
-9. **Session discipline.** For `Day trade` setups, triggers in Asia session are **disqualifying** — setup type downgrades to `Swing` at best, or skips. For `Swing` setups, Asia triggers require London-open re-confirmation.
+9. **Session awareness.** For swing setups, Asia-session triggers are not disqualifying but softer — note in the setup descriptor that a fill in Asia needs London-open confirmation before sizing. When `sessions.current_session == "close"` (22–23 UTC), defer execution commentary to the next London open.
 10. **Macro/news awareness — gate + visible calendar.** Read `data/macro_context.json` when present. Use it for three things: (a) the **Catalyst Gate** (scheduled US high-impact events tighten setups or — in the narrow extreme-proximity exception — stand aside), (b) the **Calendar economic** output section (list qualifying events within the trade window so the reader sees the schedule at a glance), and (c) at most ONE news-attribution clause inside Sinteză when a material headline clearly explains the 24h move (ETF flows, SEC decision, exchange event, Powell comment). Macro does NOT vote in Order Flow — orderflow stays sovereign for direction. Never speculate about events not in the file.
 11. **Position-in-range context.** Read `current_leg.pct_from_low` / `pct_from_high` with `leg_direction`. Classify the active leg:
     - **Extension**: `leg_direction == "up_from_low"` AND `pct_from_low > 5` OR `leg_direction == "down_from_high"` AND `pct_from_high > 5`. Fading a >5% extension mid-leg earns a −10% confidence modifier — usually what's about to happen is continuation, not reversal.
@@ -277,7 +278,7 @@ The payload has this shape:
     {
       "id": "BTC_LONG_20260422T0630Z",
       "direction": "long" | "short",
-      "setup_type": "day_trade" | "swing",
+      "setup_type": "swing",               // always swing — day_trade horizon retired
       "confidence": int,
       "created_at": str,                   // ISO-8601
       "entry_1": float, "entry_2": float,
@@ -350,10 +351,10 @@ Compute `hours_until = (event.date_utc - payload.timestamp_utc) / 3600` for the 
 When the gate is in **Tighten** mode, note it explicitly inside Sinteză & Condiții de piață: *"Catalizator: {event.title} la {HH:MM} UTC în ~Nh — regim Tighten (confidence ≥ 75%, post-event pre-condition mandatory)."*
 
 **Setup expression under Tighten mode — example:**
-- Setup header: `### Setup Long — post-Core Retail Sales break $77,604 — **Confidence 78%** · Day trade`
+- Setup header: `### Setup Long — post-Core Retail Sales break $77,604 — **Confidence 78%**`
 - Invalidare line: `invalid pre-Core Retail Sales (12:30 UTC); fill pre-print voidat. Post-print: close 4h sub $77,200.`
 
-The post-event prefix in the descriptor makes the pre-print fill invalid by contract. The rest of the setup block (Intrare 1/2/Medie, TP, SL, Invalidare) stays fully structured — the trader gets a complete plan that activates the moment the print lands.
+The post-event prefix in the descriptor makes the pre-print fill invalid by contract. The rest of the setup block (Intrare 1/2/Medie, SL, Invalidare) stays fully structured — the trader gets a complete plan that activates the moment the print lands.
 
 **Extreme-proximity exception (<15 min).** When `hours_until < 0.25` AND the event is one of `{FOMC Statement, FOMC Press Conference, Federal Funds Rate, FOMC Meeting Minutes, Non-Farm Employment Change, CPI m/m, Core CPI m/m, Core PCE Price Index m/m}`, the tape can flip multiple times in minutes and no mechanical trigger survives — emit the Regime-Gate-style stand-aside briefing (see Regime Gate below) with the event as the reason, instead of a setup block. Other high-impact events (Retail Sales, ISM, GDP, Claims, Powell speeches) produce post-event setups even at <15min — they move price but rarely cause chaotic whipsaws.
 
@@ -463,7 +464,7 @@ Use `sessions.current` and `sessions.prior` as intraday liquidity pools:
 
 - **Session high** = intraday BSL (buy-side liquidity). Shorts place stops above; sweep of session high often triggers reversal.
 - **Session low** = intraday SSL (sell-side liquidity). Longs place stops below; sweep of session low often triggers reversal.
-- For Day trade setups, the **prior session high/low** is a very high-quality trigger level — use as entry anchor when proximate.
+- The **prior session high/low** can serve as an intraday trigger level for the LTF confirmation *after* price has reached the setup's entry zone — but it is NOT an entry anchor for swing horizons (too shallow).
 
 Weave into Sinteză & Condiții de piață when proximate: *"sesiune curentă Londra ($75,814–$75,982); prior Londra $74,619–$75,572 act ca magnet intraday."*
 
@@ -530,6 +531,13 @@ The vote is **woven into Sinteză & Condiții de piață** (e.g. *"order flow Lo
 - Setup direction **opposite** Order flow vote → −10% confidence modifier (can push a setup below 55% → skip).
 - Vote = Mixed or N/A → no modifier.
 
+**Counter-trend hard gate (Operating Principle #5 enforcement).** A counter-trend setup (opposing BOTH `market_structure['1M'].bias` AND `market_structure['4h'].bias`) additionally requires:
+
+- **≥ 2 signals voting FOR** the setup direction in the Order Flow Vote table above, AND
+- **< 3 signals voting AGAINST** the setup direction.
+
+If either condition fails → skip the counter-trend side with `counter-trend fără suport de order flow` as the reason. This is a **hard gate**, not a confidence modifier — it fires before scoring, cannot be overridden by confluence. Rationale: counter-trend setups succeed only when flow is already leaking the reversal (funding extremes, divergence, basis flip). When flow agrees with the HTF bias that the setup opposes, the setup is front-running the market, which the pipeline should not publish.
+
 ## Session Awareness
 
 Parse `timestamp_utc` hour (UTC):
@@ -593,7 +601,9 @@ For each candidate entry zone Z:
 | A strike wall (from `options.strike_walls`) | The wall strike |
 | Multiple / none present | Zone extreme (`zone.min_price` for long, `zone.max_price` for short) |
 
-**Ladder width:** Intrare 1 → Intrare 2 distance should equal **0.3–0.8 × daily_atr** (or 1.0–1.5 × atr_by_tf['1h'] for day trades). Too narrow → ladder adds no value; too wide → second fill sits dangerously close to stop.
+**Ladder width:** Intrare 1 → Intrare 2 distance should equal **0.3–0.8 × atr_by_tf['4h']**. Too narrow → ladder adds no value; too wide → second fill sits dangerously close to stop.
+
+**Entry distance gate (hard floor, see Operating Principle #6):** Intrare 1 must be ≥ 0.5 × atr_by_tf['4h'] from current price in the setup direction. Intrare 2 must be ≥ 1.0 × atr_by_tf['4h']. If no structurally-valid zone sits at the required depth, skip the side.
 
 **State both entries + the average in the setup:**
 ```
@@ -602,7 +612,7 @@ For each candidate entry zone Z:
 
 `Medie = (X + Y) / 2` — it is cited ONLY as a reference point for the stop-width percentage (`width = |avg − stop| / avg`). No R:R, no targets, no reward projection is computed — target selection is the human's job after fill.
 
-**Skip the ladder only when the zone is extremely tight** (width < 0.3 × daily_atr) — in that case, state a single entry price but clearly flag `single-leg` and note why.
+**Skip the ladder only when the zone is extremely tight** (width < 0.3 × atr_by_tf['4h']) — in that case, state a single entry price but clearly flag `single-leg` and note why. Even then the single entry must still clear the distance gate.
 
 ### LTF trigger (internal reasoning — drives entries, stop, confidence)
 
@@ -625,26 +635,22 @@ The stop must sit **just beyond the specific structural level where the thesis d
 
 1. **Liquidity pool** (long: SSL below entry; short: BSL above entry) — stop goes beyond `liquidity.sell_side[i].price` / `liquidity.buy_side[i].price`.
 2. **Swing cluster** — `swing_clusters.low_clusters[i].price_mean` for longs; `.high_clusters[i].price_mean` for shorts. Only if the cluster has ≥ 2 touches and is < 48h fresh.
-3. **MS invalidation** — `market_structure[tf].invalidation_level` for the anchor TF (1h for day trade, 4h for swing).
+3. **MS invalidation** — `market_structure['4h'].invalidation_level` (preferred) or `market_structure['1h'].invalidation_level` (fallback).
 4. **OB/FVG extreme** — `zone.anchors.OB_BULL.price` (long) / `.OB_BEAR.price` (short); fall back to `zone.anchors.FVG_BULL.price` / `.FVG_BEAR.price`.
 5. **Zone extreme** — `entry_zone.min_price` (long) / `.max_price` (short).
 
-**Step 2 — add the minimum buffer.** Buffer is a floor, not a formula replacement:
-
-- **Day trade:** `max(0.8 × atr_by_tf['1h'], 0.20% × current_price)`.
-- **Swing:** `max(0.5 × atr_by_tf['4h'], 0.25% × current_price)`.
-- **Fallback if `atr_by_tf[tf]` is null:** `0.15 × daily_atr` (day trade) / `0.25 × daily_atr` (swing). Note the degradation in Sinteză.
+**Step 2 — add the minimum buffer.** Buffer is a floor, not a formula replacement: `max(0.5 × atr_by_tf['4h'], 0.25% × current_price)`. Fallback to `0.25 × daily_atr` when 4h ATR is null (note the degradation in Sinteză).
 
 **Step 3 — apply:**
 - Long: `stop = anchor − buffer`.
 - Short: `stop = anchor + buffer`.
 
-**Step 4 — cap check.** Compute `width = |avg_entry − stop| / avg_entry`. Cap: **1.8%** day trade, **3.5%** swing. If exceeded → either wait for a deeper entry (moves `avg_entry` closer to the anchor) or skip the setup. **Never widen the stop past the structural anchor to fit a cap.**
+**Step 4 — cap check.** Compute `width = |avg_entry − stop| / avg_entry`. Cap: **3.5%**. If exceeded → either wait for a deeper entry (moves `avg_entry` closer to the anchor) or skip the setup. **Never widen the stop past the structural anchor to fit a cap.**
 
 **Step 5 — next-zone check.** If the stop sits inside an adjacent strong zone, move it beyond that zone's far edge (and re-check Step 4).
 
 **Step 6 — name the anchor in the SL line.** The setup's SL bullet MUST cite the structural anchor, not just a raw price. Examples:
-- *"SL $75,300 — sub pool SSL $75,500 (neatins, 8h fresh) + ATR 1h"*
+- *"SL $75,300 — sub pool SSL $75,500 (neatins, 8h fresh) + ATR 4h"*
 - *"SL $76,040 — sub cluster $76,378 (6x, 5h) + 0.25%"*
 - *"SL $77,820 — peste swing-high 4h $77,650 + ATR 4h"*
 - *"SL $76,850 — sub MS invalidation 4h $77,100 + 0.25%"*
@@ -667,7 +673,7 @@ Start each candidate at **base 60%**. Apply modifiers, then clamp to `[50, 90]` 
 | LTF trigger = breakout+retest with cleaner alternative available | −5% |
 | Stop anchored on a ≥ 2-family structural level (pool+MS, cluster+OB, etc.) | +5% |
 | Stop anchored only on zone extreme (no deeper structure) | −5% |
-| Stop width > 1.5% (day trade) or > 3.0% (swing) | −5% |
+| Stop width > 3.0% | −5% |
 | Position-in-range: fading a > 5% extension | −10% |
 | ETH long aligned with bullish ETH/BTC (ETH only) | +5% |
 | Tier-1 US calendar event inside 24h + Catalyst Gate = Tighten | −10% |
@@ -678,23 +684,26 @@ Start each candidate at **base 60%**. Apply modifiers, then clamp to `[50, 90]` 
 
 **Hard floors (cannot be waived regardless of modifiers):**
 - Entry zone must contain ≥ 1 anchor on `1h`, `4h`, or `1d` (Operating Principle #3).
-- Stop width ≤ 1.8% (day trade) / ≤ 3.5% (swing).
+- **Entry distance gate:** Intrare 1 ≥ 0.5 × atr_by_tf['4h'] from current price; Intrare 2 ≥ 1.0 × atr_by_tf['4h']. Setups failing this are day-trade-geometry dressed as swing — skip.
+- Stop width ≤ 3.5%.
 - SL line must name its structural anchor (see Step 6 above).
-- For `Day trade`: session must be London, overlap, or NY.
+- **Counter-trend order-flow gate:** a setup opposing BOTH 1M and 4h bias (counter-trend) must have ≥ 2 Order-Flow-Vote signals FOR its direction AND < 3 signals against. Counter-trend against flow = skip, no exceptions. See Operating Principle #5 + Order Flow Vote section.
 - Catalyst Gate Tighten mode: confidence ≥ 75% AND counter-trend barred AND post-event pre-condition expressed in descriptor + Invalidare.
 - If any hard floor fails → skip the side.
 
-If final confidence < 55% (or < 75% in Tighten mode) → skip that side with: `Nu apare setup clean pe partea {long|short} în acest moment — {reason: confluențe insuficiente | zonă fără componentă 1h/4h/1d | stop prea larg | stop fără ancoră structurală | order flow contrar | confidence sub prag}.`
+If final confidence < 55% (or < 75% in Tighten mode) → skip that side with: `Nu apare setup clean pe partea {long|short} în acest moment — {reason: confluențe insuficiente | zonă fără componentă 1h/4h/1d | stop prea larg | stop fără ancoră structurală | intrări prea apropiate de preț curent | counter-trend fără suport de order flow | confidence sub prag}.`
 
 ### Setup header convention
 
-Header format: `### Setup {Long|Short} — {short descriptor} — **Confidence {NN}%**{ (counter-trend)}? · {Day trade | Swing}`
+Header format: `### Setup {Long|Short} — {short descriptor} — **Confidence {NN}%**{ (counter-trend)}?`
+
+(The horizon tag has been dropped — every setup is swing by design. Operating Principle #1.)
 
 Examples:
-- `### Setup Long — sweep al pool-ului SSL $73,310 — **Confidence 78%** · Day trade`
-- `### Setup Short — rally la rezistența MS BOS — **Confidence 72% (counter-trend)** · Day trade`
-- `### Setup Long — pullback la suportul structural — **Confidence 62%** · Swing`
-- `### Setup Long — post-Core Retail Sales break $77,604 — **Confidence 78%** · Day trade` (Tighten mode; pre-condition lives in Invalidare)
+- `### Setup Long — sweep al pool-ului SSL $73,310 — **Confidence 78%**`
+- `### Setup Short — rally la rezistența MS BOS — **Confidence 72% (counter-trend)**`
+- `### Setup Long — pullback la suportul structural — **Confidence 62%**`
+- `### Setup Long — post-Core Retail Sales break $77,604 — **Confidence 78%**` (Tighten mode; pre-condition lives in Invalidare)
 
 ## Output Format
 
@@ -719,7 +728,7 @@ Examples:
 ### Status tichete din rulări anterioare
 
 - **Active (pending fill):** {N}
-  - `{id_short}` · {Long|Short} {Day trade|Swing} · entry $X/$Y · stop $Z · armed · creat acum Nh
+  - `{id_short}` · {Long|Short} · entry $X/$Y · stop $Z · armed · creat acum Nh
 - **Rezolvate în această rulare:** {M}
   - `{id_short}` · {final status label} @ $P ({reason_label}, {when_label})
 ```
@@ -727,7 +736,7 @@ Examples:
 **Rules:**
 
 - `id_short` = strip the asset/direction prefix, keep the timestamp tail (e.g. `20260422T0630Z`).
-- Active ticket line includes: direction, setup type, entry ladder, stop, current ledger status (`armed`), and hours since `created_at` (relative to the payload's `timestamp_utc`). No TP columns — the ledger does not track TPs.
+- Active ticket line includes: direction, entry ladder, stop, current ledger status (`armed`), and hours since `created_at` (relative to the payload's `timestamp_utc`). No horizon tag (all swing), no TP columns (ledger doesn't track TPs).
 - Resolved ticket line includes the final status translated to Romanian:
   | ledger status | render as |
   |---|---|
@@ -749,9 +758,9 @@ Examples:
 ### Status tichete din rulări anterioare
 
 - **Active (pending fill):** 1
-  - `20260422T0630Z` · Long Swing · entry $76,894/$76,414 · stop $75,800 · armed · creat acum 3h
+  - `20260422T0630Z` · Long · entry $76,894/$76,414 · stop $75,800 · armed · creat acum 3h
 - **Rezolvate în această rulare:** 1
-  - `20260421T1800Z` · Short Day trade · kill-switch sus @ $78,850 (kill_switch_up_fired, acum 2h)
+  - `20260421T1800Z` · Short · kill-switch sus @ $78,850 (kill_switch_up_fired, acum 2h)
 ```
 
 If both counts are zero, the entire Section 0 is omitted — briefing starts at Preț curent.
@@ -807,7 +816,7 @@ Max 20 words per line. Probabilities sum to 100% ±5%.
 Each setup MUST match this exact shape — **3 bullets, one line each**:
 
 ```
-### Setup {Long|Short} — {short descriptor} — **Confidence {NN}%** · {Day trade|Swing}
+### Setup {Long|Short} — {short descriptor} — **Confidence {NN}%**
 
 - **Intrare 1 (50%):** $X · **Intrare 2 (50%):** $Y · **Medie:** $Z.
 - **SL:** $S — {structural anchor clause} (width N.NN%).
@@ -819,25 +828,26 @@ Each setup MUST match this exact shape — **3 bullets, one line each**:
 - SL on ONE line: raw price + **named structural anchor** + width percentage. Width = `|Medie − SL| / Medie`. The anchor clause is mandatory — see Stop placement Step 6 for examples and allowed forms. A bare `**SL:** $S (width N.NN%)` without a named anchor is invalid.
 - Invalidare: ONE line, one narrative condition (e.g. *"close 4h peste $78,900 cu menținere"*). For Tighten-mode setups, the Invalidare must include the pre-event voiding clause.
 - **Never emit a TP bullet.** Never reference a specific profit-taking level. The user decides TP in real time.
+- **Never emit a horizon tag.** All setups are swing (1–5 days). Entry distance gate enforces the horizon.
 
 **Full setup block example (standard):**
 
 ```
-### Setup Short — fade la zidul call $78k — **Confidence 72% (counter-trend)** · Day trade
+### Setup Short — fade la zidul call $78k — **Confidence 72% (counter-trend)**
 
-- **Intrare 1 (50%):** $77,900 · **Intrare 2 (50%):** $78,333 · **Medie:** $78,117.
-- **SL:** $78,920 — peste BSL $78,700 (neatins, 11h fresh) + ATR 1h (width 1.03%).
-- **Invalidare:** close 4h peste $78,900 cu menținere.
+- **Intrare 1 (50%):** $78,650 · **Intrare 2 (50%):** $79,100 · **Medie:** $78,875.
+- **SL:** $79,720 — peste BSL $79,450 (neatins, 11h fresh) + ATR 4h (width 1.07%).
+- **Invalidare:** close 4h peste $79,500 cu menținere.
 ```
 
 **Full setup block example (Tighten mode):**
 
 ```
-### Setup Long — post-Core Retail Sales break $77,604 — **Confidence 78%** · Day trade
+### Setup Long — post-Core Retail Sales break $77,604 — **Confidence 78%**
 
-- **Intrare 1 (50%):** $77,650 · **Intrare 2 (50%):** $77,420 · **Medie:** $77,535.
-- **SL:** $77,130 — sub MS invalidation 1h $77,280 + ATR 1h (width 0.52%).
-- **Invalidare:** invalid pre-Core Retail Sales (12:30 UTC); orice fill pre-print voidat. Post-print: close 1h sub $77,130.
+- **Intrare 1 (50%):** $76,880 · **Intrare 2 (50%):** $76,420 · **Medie:** $76,650.
+- **SL:** $75,730 — sub MS invalidation 4h $76,000 + ATR 4h (width 1.20%).
+- **Invalidare:** invalid pre-Core Retail Sales (12:30 UTC); orice fill pre-print voidat. Post-print: close 4h sub $76,000.
 ```
 
 **Skip line format (when no clean setup on a side):**
@@ -974,7 +984,7 @@ Every setup block emitted in Section 5 of the briefing **must** also be written 
   "tickets": [
     {
       "direction": "long" | "short",
-      "setup_type": "day_trade" | "swing",
+      "setup_type": "swing",
       "confidence": 85,
       "entry_1": 76894.0,
       "entry_2": 76414.0,

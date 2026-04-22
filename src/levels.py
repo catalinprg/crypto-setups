@@ -209,13 +209,43 @@ def cluster_levels(levels: Iterable[Level], radius: float) -> list[MultiSourceZo
     return [_build_zone(g) for g in groups]
 
 
+# Structural families that come from one BOS event often print together:
+# a 4h BOS draws the MS level, leaves an OB on the prior candle, and an FVG
+# inside the breakout candle. Counting those as three independent signals
+# double- and triple-counts the same underlying event. Same-TF MS/OB/FVG
+# levels in one cluster collapse into a single STRUCTURAL_EVENT pseudo-family.
+_STRUCTURAL_FAMILIES: frozenset[str] = frozenset({"MS", "OB", "FVG"})
+
+
+def _effective_families(group: list[Level]) -> set[str]:
+    """Family set used for classification + scoring, with same-TF structural
+    events collapsed. MS + OB + FVG on the same TF → one family; on
+    different TFs → they stay separate (different events at similar price).
+    """
+    families: set[str] = set()
+    struct_by_tf: dict[str, set[str]] = {}
+    for l in group:
+        fam = SOURCE_FAMILY.get(l.source, l.source)
+        if fam in _STRUCTURAL_FAMILIES:
+            struct_by_tf.setdefault(l.tf, set()).add(fam)
+        else:
+            families.add(fam)
+    for tf, fams in struct_by_tf.items():
+        if len(fams) >= 2:
+            families.add(f"STRUCTURAL_EVENT_{tf}")
+        else:
+            families.update(fams)
+    return families
+
+
 def _build_zone(group: list[Level]) -> MultiSourceZone:
     min_p = min(l.min_price for l in group)
     max_p = max(l.max_price for l in group)
-    families = {SOURCE_FAMILY.get(l.source, l.source) for l in group}
-    source_count = len(families)
-    score = _score(group, families)
-    cls = _classify(source_count, families)
+    raw_families = {SOURCE_FAMILY.get(l.source, l.source) for l in group}
+    effective = _effective_families(group)
+    source_count = len(effective)
+    score = _score(group, effective)
+    cls = _classify(source_count, effective, raw_families)
     return MultiSourceZone(
         min_price=min_p, max_price=max_p,
         levels=tuple(group),
@@ -227,8 +257,10 @@ def _build_zone(group: list[Level]) -> MultiSourceZone:
 
 def _score(group: list[Level], families: set[str]) -> float:
     """Scoring:
-      - +3 per distinct source family (heavily rewards orthogonal agreement)
-      - +TF_WEIGHT * strength per individual level contribution
+      - +3 per distinct source family (heavily rewards orthogonal agreement).
+        Uses EFFECTIVE families (same-TF structural events collapsed to 1),
+        so a single BOS event no longer triples the family bonus.
+      - +TF_WEIGHT * strength per individual level contribution.
       - +HTF bonus multiplier applied to the zone total when any HTF source
         (1w, 1M) contributes: 1.25x for 1w, 1.5x for 1M.
     """
@@ -243,13 +275,14 @@ def _score(group: list[Level], families: set[str]) -> float:
 
 
 def _classify(
-    source_count: int, families: set[str]
+    source_count: int, families: set[str], raw_families: set[str],
 ) -> Literal["strong", "confluence", "structural_pivot", "level"]:
     if source_count >= 3:
         return "strong"
     if source_count == 2:
-        # Structural pivot = MS present with any other source
-        if "MS" in families:
+        # Structural pivot = MS present (check raw tags — a STRUCTURAL_EVENT_*
+        # pseudo-family contains MS when MS is one of its sources).
+        if "MS" in raw_families:
             return "structural_pivot"
         return "confluence"
     return "level"
